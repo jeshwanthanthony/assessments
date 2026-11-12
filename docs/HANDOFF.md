@@ -7,7 +7,7 @@ Where this file and Git disagree, Git wins: fix this file.
 
 | Fact | Value (verified 2026-11-12) |
 |---|---|
-| Working branch | `main` (local repo; no remote yet) |
+| Working branch | `main`, pushed to github.com/jeshwanthanthony/assessments |
 | Uncommitted changes | none after the release commit |
 | Who commits here | Claude Code and the owner |
 
@@ -49,6 +49,6 @@ Nothing is in flight.
 
 ## 8. Exact next steps
 
-1. Push to a Git remote and connect Netlify to it for deploy previews.
+1. Connect Netlify to the GitHub repo for deploy previews.
 2. In Supabase Auth settings: disable native sign-ups (SEC-004) and turn on email confirmation, then switch /api/auth/signup to auth.signUp (SEC-006).
 3. Next candidate: suggestion mode, or email verification + password reset.
