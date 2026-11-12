@@ -11,7 +11,8 @@ Sign in with a sample account (`maya@docspace.dev` / `demo1234`, or `daniel@docs
 - Create, rename and edit rich-text documents (bold, italic, underline, headings, lists), with autosave
 - Import `.txt` / `.md` files (up to 1 MB); export to Markdown or PDF
 - Share by email as Editor, Commenter or Viewer
-- Comments with replies, version history with restore, live presence
+- Comments with replies, version history with restore
+- Live collaboration: who is in the document, everyone's cursor and selection with their name, and shared documents appearing instantly
 - Several accounts per browser, a different one per tab
 
 ## Stack

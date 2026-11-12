@@ -17,10 +17,11 @@ Where this file and Git disagree, Git wins: fix this file.
 |---|---|
 | Host | Netlify site `docspace-ajaia`, https://docspace-ajaia.netlify.app |
 | Database | Supabase project `docspace` (us-east-1), 5 migrations applied |
-| Verified | unit 16/16, rls-check 32/32 (live DB), e2e 89/89 and UI 42/42 against production (2026-11-12) |
+| Verified | unit 16/16, rls-check 32/32 (live DB), e2e 89/89 and UI 47/47 against production (2026-11-12) |
 
 ## 3. What changed recently
 
+- Live cursors (named, coloured carets and selections); instant "shared with you"; session checks verified locally (ES256 getClaims): share about 110 ms warm on production (`npm run perf:share`).
 - Several accounts per browser, one per tab (server-held sessions, x-docspace-user); Delete account; fixed the stale-tab bug (docs/MISTAKES.md); no "demo" wording in the UI.
 - Sign-up with password policy; comments (threads, resolve); version history (preview, restore); Commenter role.
 - Original brief, full UI handoff and playbook preserved unmodified in docs/reference/.

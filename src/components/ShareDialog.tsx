@@ -3,6 +3,7 @@ import { useState } from "react";
 import { AlertCircle, CheckCircle2, Lock } from "lucide-react";
 import { api, ApiFailure, Avatar, Dialog, ICON, ICON_SM, Spinner, useToast } from "./ui";
 import { isValidEmail } from "@/lib/core/doc";
+import { notifyShared } from "./realtime";
 import { ROLE_LABEL, type DocSummary, type Profile, type ShareRole } from "@/lib/core/types";
 
 type Msg = { kind: "err" | "ok"; text: string } | null;
@@ -36,6 +37,7 @@ export function ShareDialog({ doc, me, onClose, onChange }: {
       setEmail("");
       setMsg({ kind: "ok", text: r.message });
       toast(`Shared with ${r.user.name}`);
+      notifyShared(r.user.id, { by: me.name, title: doc.title });
     } catch (err) {
       setMsg({ kind: "err", text: err instanceof ApiFailure ? err.message : "Couldn't share this document. Try again." });
     } finally {

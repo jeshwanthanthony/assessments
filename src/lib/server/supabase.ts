@@ -2,7 +2,7 @@ import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
-import type { SupabaseClient, User } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { clientFor } from "./accounts";
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -35,14 +35,28 @@ export function fail(http: number, code: string, message: string) {
 /** Resolves the verified user (server-checked with Supabase Auth, never trusted from the client) or returns 401. */
 export const EXPECTED_USER_HEADER = "x-docspace-user";
 
+export type AuthUser = { id: string; email: string };
+
+/**
+ * Verifies the session token's signature (ES256) locally against the project's cached public keys:
+ * about 1 ms instead of a network round trip to Supabase Auth on every request.
+ */
+export async function verifiedUser(sb: SupabaseClient, jwt?: string): Promise<AuthUser | null> {
+  const { data, error } = await sb.auth.getClaims(jwt);
+  const c = data?.claims;
+  if (error || !c?.sub) return null;
+  return { id: c.sub, email: typeof c.email === "string" ? c.email : "" };
+}
+
 /**
  * Resolves the verified user, or returns 401. If the page says which user it believes it is
  * (x-docspace-user) and the session cookie now belongs to someone else (another tab switched
  * account), refuse with 409 so a stale tab can never act as the wrong person.
  */
-export async function requireUser(): Promise<{ sb: SupabaseClient; user: User } | NextResponse> {
+export async function requireUser(): Promise<{ sb: SupabaseClient; user: AuthUser } | NextResponse> {
   const sb = await supabaseServer();
-  const { data } = await sb.auth.getUser();
+  const user = await verifiedUser(sb);
+  const data = { user };
   const expected = (await headers()).get(EXPECTED_USER_HEADER);
   if (expected && expected !== data.user?.id) {
     // This tab uses another account signed in on this browser: act as it, or refuse if it is not signed in here.

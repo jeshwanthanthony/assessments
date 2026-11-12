@@ -40,7 +40,7 @@ Sample accounts are shared by every reviewer, so their data may change while you
 
 | Stretch | What it does |
 |---|---|
-| Real-time collaboration indicators | Avatars of who else has the document open (Supabase Realtime presence). Saves and comments by others refresh an idle view. |
+| Real-time collaboration indicators | Avatars of who else has the document open; **live cursors and selections** of other people, with their name in their colour; a document shared with you appears in your open list with a toast. Saves and comments by others refresh an idle view. |
 | Commenting | Comment on selected text or the whole document. Threads have replies and resolve/reopen, and clicking a quote jumps to the text. Updates reach other open tabs live. |
 | Version history | A snapshot per person's 10-minute editing session (50 kept), with preview and restore. Restoring adds a version; it never deletes history. |
 | Export | Markdown download, and Print / save as PDF |
@@ -80,7 +80,7 @@ To use **your own Supabase project**:
 | `npm test` | 16 | Import/export round-trip, title/email/file validation, password policy, role rules, share and sign-up status → HTTP code and UI copy | nothing (offline) |
 | `npm run test:rls` | 32 | Against the real database as real users: outsiders and anon see nothing; viewers can't write or comment; commenters can't edit; editors can't delete, share or take ownership; no comment as someone else; versions only via trigger; weak passwords refused by the database | `.env.local` |
 | `npm run test:e2e` | 89 | All five core tasks over HTTP as two users, plus sign-up, new-account sharing both ways, the commenter role, comments, version preview/restore, several accounts with a different one per tab, and account deletion | a running app (`BASE=…`, default `http://localhost:3000`) |
-| `npm run test:ui` | 42 | Headless Chromium at desktop and phone sizes: sign-up, login, lists, search, create, format, autosave, reload persistence, share, comment/reply/resolve, history, import, two accounts in two tabs of one browser on the same document (each sees the other), switching one tab only, export menu and Markdown download, no sideways scroll on phone | a running app; `npx playwright install chromium` once |
+| `npm run test:ui` | 47 | Headless Chromium at desktop and phone sizes: sign-up, login, lists, search, create, format, autosave, reload persistence, share, comment/reply/resolve, history, import, two accounts in two tabs of one browser on the same document (each sees the other), switching one tab only, export menu and Markdown download, no sideways scroll on phone | a running app; `npx playwright install chromium` once |
 
 All four suites pass against production at https://docspace-ajaia.netlify.app (2026-11-12). The two live suites create and delete their own documents.
 

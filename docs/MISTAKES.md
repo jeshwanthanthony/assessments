@@ -16,6 +16,15 @@ Steps / Broke / Why / THE FIX / Replay / Undo / Never again
 
 ## Entries (newest first)
 
+### BUG-2026-11-12-deleted-account-cookie-kept (found by the e2e suite after the speed change)
+Steps: 1. Switch session checks to local token verification. 2. Delete an account. 3. Call /api/me with the same browser.
+Broke: 200 instead of 401: the browser was still signed in as the deleted account.
+Why: the sign-out helper still asked Supabase Auth "who is this?"; for a deleted user that returns nobody, so it skipped clearing the cookie. Before the speed change, requireUser asked the same question and failed, which hid it.
+THE FIX: `signOutAccount` compares the token's own subject (`getClaims`), which still identifies a deleted account.
+Replay: `npm run test:e2e` ("delete: the session is gone").
+Undo: none.
+Never again: when changing how identity is checked, run the account-deletion and sign-out tests too, not only the speed measurement.
+
 ### BUG-2026-11-12-stale-tab-acts-as-another-account (reported by the owner with a screenshot)
 Steps: 1. Tab A: sign up as a new account, create "Doc". 2. Tab B (same browser): sign in as maya@docspace.dev. 3. Back in tab A (still showing the new account), Share "Doc" with Maya.
 Broke: "Only the owner can add people to this document." although tab A showed the new account as Owner.

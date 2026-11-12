@@ -11,7 +11,8 @@
     "test:rls": "tsx scripts/rls-check.ts",
     "seed": "tsx scripts/seed.ts",
     "test:e2e": "tsx scripts/e2e-api.ts",
-    "test:ui": "tsx scripts/e2e-ui.ts"
+    "test:ui": "tsx scripts/e2e-ui.ts",
+    "perf:share": "tsx scripts/perf-share.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

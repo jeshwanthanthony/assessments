@@ -1,6 +1,6 @@
 import "server-only";
 import { cookies } from "next/headers";
-import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 // Several accounts signed in on one browser, and a different one per tab.
 //
@@ -81,7 +81,7 @@ export async function stashDefault(sb: SupabaseClient, except?: string): Promise
 }
 
 /** A Supabase client acting as a stored (non-default) account, refreshing its token when needed. */
-export async function clientFor(id: string): Promise<{ sb: SupabaseClient; user: User } | null> {
+export async function clientFor(id: string): Promise<{ sb: SupabaseClient; user: { id: string; email: string } } | null> {
   const entry = (await readJar()).find((a) => a.id === id);
   if (!entry) return null;
   let at = (await cookies()).get(atCookie(id))?.value;
@@ -100,12 +100,13 @@ export async function clientFor(id: string): Promise<{ sb: SupabaseClient; user:
     auth: { persistSession: false, autoRefreshToken: false },
     global: { headers: { Authorization: `Bearer ${at}` } },
   });
-  const { data } = await sb.auth.getUser(at);
-  if (data.user?.id !== id) {
-    (await cookies()).delete(atCookie(id)); // expired early: the next request refreshes
+  // Local signature check (ES256, cached keys) instead of a round trip to Supabase Auth.
+  const { data } = await sb.auth.getClaims(at);
+  if (data?.claims?.sub !== id) {
+    (await cookies()).delete(atCookie(id)); // expired: the next request refreshes it
     return null;
   }
-  return { sb, user: data.user };
+  return { sb, user: { id, email: typeof data.claims.email === "string" ? data.claims.email : entry.email } };
 }
 
 /** Makes a stored account the default (cookie) account. False (and forgotten) if its session expired. */
@@ -125,8 +126,9 @@ export async function promoteNext(sb: SupabaseClient): Promise<PublicAccount | n
 
 /** Signs one account out of this browser: revokes its session and forgets it. */
 export async function signOutAccount(sb: SupabaseClient, id: string): Promise<void> {
-  const { data } = await sb.auth.getUser();
-  if (data.user?.id === id) {
+  // Local token check: also matches an account that was just deleted (Supabase Auth no longer knows it).
+  const { data: c } = await sb.auth.getClaims();
+  if (c?.claims?.sub === id) {
     await sb.auth.signOut({ scope: "local" }).catch(() => {});
     await promoteNext(sb);
     return;

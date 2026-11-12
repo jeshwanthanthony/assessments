@@ -336,3 +336,8 @@ svg.i.sm{width:14px;height:14px}svg.i.lg{width:20px;height:20px}
 .menu button.danger-item,.menu button.danger-item svg{color:var(--danger)}
 .export-btn{padding:0 8px}
 @media (max-width:1024px){.export-lbl{display:none}.export-btn{width:28px;height:28px;padding:0}}
+/* live cursors of other people */
+.rc-caret{position:relative;margin:0 -1px;border-left:2px solid;pointer-events:none;word-break:normal}
+.rc-label{position:absolute;left:-2px;bottom:100%;margin-bottom:1px;padding:1px 5px;border-radius:4px 4px 4px 0;font:500 11px/14px var(--font-ui);color:#fff;white-space:nowrap;user-select:none;letter-spacing:0}
+.rc-sel{border-radius:2px}
+@media print{.rc-caret,.rc-sel{display:none!important;background:none!important}}

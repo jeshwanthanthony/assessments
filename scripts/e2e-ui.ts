@@ -197,6 +197,28 @@ async function main() {
   check("account menu lists the other signed-in account", true);
   await shot(tabA, "43-account-menu");
   await tabA.keyboard.press("Escape");
+  // live share: Daniel watches Shared with me while Maya shares a new document from her tab
+  await tabB.getByRole("link", { name: /Shared with me/ }).click();
+  await tabB.getByRole("heading", { name: "Shared with me" }).waitFor();
+  await tabA.locator(".sidebar").getByRole("button", { name: "New document" }).click();
+  await tabA.waitForURL(/\/doc\//);
+  const liveDocId = tabA.url().split("/doc/")[1].split("?")[0];
+  await tabA.locator(".title-in").fill("Live share test");
+  await tabA.getByText("Saved", { exact: true }).waitFor({ timeout: 10000 });
+  const t0 = Date.now();
+  await tabA.getByRole("button", { name: "Share", exact: true }).click();
+  await tabA.getByPlaceholder("Add people by email").fill("daniel@docspace.dev");
+  await tabA.getByRole("dialog").getByRole("button", { name: "Share", exact: true }).click();
+  await tabA.getByText("Daniel Okafor can now edit this document.").waitFor();
+  const shareMs = Date.now() - t0;
+  await tabB.locator(".tr.row", { hasText: "Live share test" }).waitFor({ timeout: 8000 }).catch(() => {});
+  const liveMs = Date.now() - t0;
+  check(`live share: it appears in Daniel's open Shared with me without a reload (share ${shareMs} ms, visible to Daniel after ${liveMs} ms)`, (await tabB.locator(".tr.row", { hasText: "Live share test" }).count()) === 1);
+  check("live share: Daniel gets a toast naming who shared it", (await tabB.getByText('Maya Chen shared "Live share test" with you').count()) === 1);
+  await tabA.keyboard.press("Escape");
+  await tabA.evaluate((i) => fetch(`/api/documents/${i}`, { method: "DELETE", headers: { "x-docspace-user": sessionStorage.getItem("ds-tab-account") ?? "" } }), liveDocId);
+  await tabA.goto(BASE + "/");
+
   // both open the document Maya shares with Daniel
   const shared = (await tabA.evaluate(async () => (await (await fetch("/api/documents?scope=owned", { headers: { "x-docspace-user": sessionStorage.getItem("ds-tab-account") ?? "" } })).json()).documents)) as { id: string; title: string }[];
   const roadmap = shared.find((d) => d.title === "Q4 Product Roadmap")!;
@@ -209,6 +231,17 @@ async function main() {
   check("same doc, two tabs: Maya's tab shows Daniel as active", (await tabA.locator(".presence .av[title='Daniel Okafor']").count()) === 1);
   check("same doc, two tabs: Daniel's tab shows Maya as active", (await tabB.locator(".presence .av[title='Maya Chen']").count()) === 1);
   check("Daniel's tab shows the document as shared ('Owned by Maya Chen')", await tabB.getByText("Owned by Maya Chen").isVisible());
+  // live cursors: Maya selects a word, Daniel sees her named caret and highlight (and the other way round)
+  await tabA.locator(".tiptap h2").first().click();
+  await tabA.keyboard.press("End");
+  await tabA.keyboard.press("Shift+Home");
+  await tabB.locator(".rc-label", { hasText: "Maya Chen" }).waitFor({ timeout: 10000 }).catch(() => {});
+  check("live cursor: Daniel sees Maya's caret with the name", (await tabB.locator(".rc-label", { hasText: "Maya Chen" }).count()) === 1);
+  await tabB.locator(".rc-sel").first().waitFor({ timeout: 5000 }).catch(() => {});
+  check("live cursor: Daniel sees Maya's selection highlighted", (await tabB.locator(".rc-sel").count()) >= 1);
+  await tabB.locator(".tiptap p").first().click();
+  await tabA.locator(".rc-label", { hasText: "Daniel Okafor" }).waitFor({ timeout: 10000 }).catch(() => {});
+  check("live cursor: Maya sees Daniel's caret with the name", (await tabA.locator(".rc-label", { hasText: "Daniel Okafor" }).count()) === 1);
   await shot(tabA, "44-two-tabs-maya");
   await shot(tabB, "45-two-tabs-daniel");
   // switching one tab does not change the other

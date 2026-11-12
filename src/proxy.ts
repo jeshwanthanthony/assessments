@@ -19,7 +19,9 @@ export async function proxy(request: NextRequest) {
       },
     },
   );
-  const { data } = await sb.auth.getUser();
+  // Local signature check of the session token (no round trip to Supabase Auth on every page load).
+  const { data: claims } = await sb.auth.getClaims();
+  const data = { user: claims?.claims?.sub ? { id: claims.claims.sub } : null };
   const isLogin = request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/signup";
   if (!data.user && !isLogin) return NextResponse.redirect(new URL("/login", request.url));
   // ?add=1 lets a signed-in person add another account (the current one moves to the switcher).

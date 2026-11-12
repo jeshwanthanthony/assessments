@@ -1,6 +1,7 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { api, onAuthChange, setExpectedUser } from "./ui";
+import { api, onAuthChange, setExpectedUser, useToast } from "./ui";
+import { inboxChannel, realtime } from "./realtime";
 import type { DocSummary, Profile } from "@/lib/core/types";
 
 type ListState = "loading" | "ready" | "error";
@@ -20,6 +21,17 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [owned, setOwned] = useState<DocSummary[]>([]);
   const [shared, setShared] = useState<DocSummary[]>([]);
   const [state, setState] = useState<ListState>("loading");
+
+  const reloadQuiet = useCallback(async () => {
+    try {
+      const [o, s] = await Promise.all([
+        api<{ documents: DocSummary[] }>("/api/documents?scope=owned"),
+        api<{ documents: DocSummary[] }>("/api/documents?scope=shared"),
+      ]);
+      setOwned(o.documents);
+      setShared(s.documents);
+    } catch { /* keep what is shown */ }
+  }, []);
 
   const reload = useCallback(async () => {
     setState("loading");
@@ -41,6 +53,21 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { reload(); }, [reload]);
   useEffect(() => onAuthChange(() => { api("/api/me").catch(() => {}); }), []);
+
+  // Live: a document shared with me appears without a reload.
+  const toast = useToast();
+  const meId = me?.id;
+  useEffect(() => {
+    if (!meId) return;
+    const ch = realtime().channel(inboxChannel(meId));
+    ch.on("broadcast", { event: "shared" }, ({ payload }) => {
+      const by = String(payload?.by ?? "Someone").slice(0, 80);
+      const title = String(payload?.title ?? "a document").slice(0, 200);
+      toast(`${by} shared "${title}" with you`);
+      reloadQuiet();
+    }).subscribe();
+    return () => { realtime().removeChannel(ch); };
+  }, [meId, toast]);
 
   const patchDoc = useCallback((id: string, patch: Partial<DocSummary>) => {
     const f = (l: DocSummary[]) => l.map((d) => (d.id === id ? { ...d, ...patch } : d));

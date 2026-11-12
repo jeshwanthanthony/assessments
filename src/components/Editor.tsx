@@ -12,6 +12,8 @@ import {
 import { api, ApiFailure, Avatar, ICON, ICON_LG, ICON_SM, Menu, MenuItem, onAuthChange, setExpectedUser, Spinner, Tip, useToast } from "./ui";
 import { ShareDialog } from "./ShareDialog";
 import { CommentsPanel, HistoryPanel } from "./DocPanel";
+import { realtime } from "./realtime";
+import { RemoteCursors, remoteCursorsKey, type RemoteCursor } from "./remoteCursors";
 import { AccountMenu } from "./AccountMenu";
 import { docToMarkdown, normalizeTitle, type DocJSON } from "@/lib/core/doc";
 import { canComment as roleCanComment, canEdit, type Comment, type DocFull, type DocSummary, type Profile, type Version } from "@/lib/core/types";
@@ -83,6 +85,7 @@ function EditorView({ initial, me }: { initial: DocFull; me: Profile }) {
   const [save, setSave] = useState<Save>("saved");
   const [sharing, setSharing] = useState(false);
   const [others, setOthers] = useState<Profile[]>([]);
+  const cursors = useRef(new Map<string, RemoteCursor>());
   const readOnly = !canEdit(initial.role);
   const mayComment = roleCanComment(initial.role);
   const [panel, setPanel] = useState<"comments" | "history" | null>(null);
@@ -148,6 +151,7 @@ function EditorView({ initial, me }: { initial: DocFull; me: Profile }) {
         code: false, codeBlock: false, blockquote: false, strike: false, horizontalRule: false, link: false,
       }),
       Placeholder.configure({ placeholder: "Start writing…" }),
+      RemoteCursors,
     ],
     content: initial.content,
     editorProps: {
@@ -175,9 +179,38 @@ function EditorView({ initial, me }: { initial: DocFull; me: Profile }) {
     return () => window.removeEventListener("beforeunload", onLeave);
   }, []);
 
+  // Live cursors: draw other people's carets/selections; send ours (throttled) when it moves.
+  const drawCursors = () => {
+    const ed = editorRef.current;
+    if (!ed || ed.isDestroyed) return;
+    ed.view.dispatch(ed.state.tr.setMeta(remoteCursorsKey, [...cursors.current.values()]));
+  };
+  const sendCursor = useRef<() => void>(() => {});
+  const lastSent = useRef(0);
+  const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
+  sendCursor.current = () => {
+    const ed = editorRef.current;
+    const ch = channelRef.current;
+    if (!ed || ed.isDestroyed || !ch) return;
+    const fire = () => {
+      lastSent.current = Date.now();
+      const { from, to } = ed.state.selection;
+      ch.send({ type: "broadcast", event: "cursor", payload: { id: me.id, name: me.name, color: me.color, from, to } });
+    };
+    if (pending.current) clearTimeout(pending.current);
+    const wait = 80 - (Date.now() - lastSent.current);
+    if (wait <= 0) fire(); else pending.current = setTimeout(fire, wait);
+  };
+  useEffect(() => {
+    if (!editor) return;
+    const onSel = () => sendCursor.current();
+    editor.on("selectionUpdate", onSel);
+    return () => { editor.off("selectionUpdate", onSel); };
+  }, [editor]);
+
   // Stretch: who else has this document open (Supabase Realtime presence), and live refresh when idle.
   useEffect(() => {
-    const sb = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!);
+    const sb = realtime();
     const ch = sb.channel(`doc:${initial.id}`, { config: { presence: { key: me.id } } });
     channelRef.current = ch;
     ch.on("presence", { event: "sync" }, () => {
@@ -185,6 +218,11 @@ function EditorView({ initial, me }: { initial: DocFull; me: Profile }) {
       const seen = new Map<string, Profile>();
       Object.values(state).flat().forEach((p) => { if (p.id !== me.id) seen.set(p.id, { id: p.id, name: p.name, email: p.email, color: p.color }); });
       setOthers([...seen.values()]);
+      // drop cursors of people who left, and show ours to anyone who just arrived
+      let changed = false;
+      for (const id of cursors.current.keys()) if (!seen.has(id)) { cursors.current.delete(id); changed = true; }
+      if (changed) drawCursors();
+      sendCursor.current();
     });
     ch.on("broadcast", { event: "saved" }, async ({ payload }) => {
       if (payload?.by === me.id || payload?.updatedAt === base.current) return;
@@ -200,6 +238,12 @@ function EditorView({ initial, me }: { initial: DocFull; me: Profile }) {
     });
     ch.on("broadcast", { event: "comments" }, ({ payload }) => {
       if (payload?.by !== me.id) loadCommentsRef.current();
+    });
+    ch.on("broadcast", { event: "cursor" }, ({ payload }) => {
+      const c = payload as RemoteCursor | undefined;
+      if (!c || c.id === me.id || typeof c.from !== "number" || typeof c.to !== "number") return;
+      cursors.current.set(c.id, { id: c.id, name: String(c.name).slice(0, 80), color: /^#[0-9a-f]{6}$/i.test(c.color) ? c.color : "#5f5f66", from: c.from, to: c.to });
+      drawCursors();
     });
     ch.subscribe((status) => {
       if (status === "SUBSCRIBED") ch.track({ id: me.id, name: me.name, email: me.email, color: me.color });

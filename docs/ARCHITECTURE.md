@@ -50,6 +50,13 @@ Access lives in **the database**. The API routes do not hold a service key. They
 - **Sign-out:** signing out of one account ends only its tabs; signing out of the default hands the default to the next account.
 - **Deleting an account** (password re-check) removes the user and cascades to their documents, shares, comments and versions.
 
+## Live collaboration
+
+- One Realtime connection per tab (`src/components/realtime.ts`).
+- Per document: presence (who is here), "saved" and "comments" broadcasts, and **cursor** broadcasts carrying the selection positions, throttled to every 80 ms. Remote cursors are ProseMirror decorations (`remoteCursors.ts`), never written into the document.
+- Per user, an `inbox:<id>` channel: sharing sends "shared", and the recipient's open lists refresh with a toast.
+- **Speed:** the API verifies the session token locally against the project's ES256 public keys (`getClaims`, about 1 ms with cached keys) instead of calling Supabase Auth on every request.
+
 ## Saving: why it is safe
 
 - **Autosave:** debounced 800 ms after the last change, with one request in flight at a time. Edits made during a save are sent right after it.
