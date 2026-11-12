@@ -51,7 +51,9 @@ follow-up listed), ACCEPTED (owner, dated), NEEDS_VALIDATION.
 | SEC-001 | `public.handle_new_user()` (trigger, SECURITY DEFINER) was callable via `/rest/v1/rpc` by anon and authenticated (Supabase advisor 0028/0029). | Low | FIXED (migration harden_function_exposure) |
 | SEC-002 | RLS helpers `doc_role` / `shares_a_doc_with` were exposed over REST in `public`; they only reveal the caller's own access, but are not API. | Low | FIXED (moved to schema `private`) |
 | SEC-003 | Supabase Auth leaked-password protection is off (advisor). Demo accounts use a public password by design. | Low | ACCEPTED (assessment demo; enable for real users) |
-| SEC-004 | Supabase public sign-up is enabled by default: anyone with the publishable key can call sign-up directly (email confirmation still required). The UI offers no sign-up. | Low | OPEN (disable sign-ups in Auth settings, or add a sign-up screen deliberately) |
+| SEC-004 | Supabase's native sign-up endpoint is also enabled (email confirmation required there). The app's own sign-up goes through `public.sign_up` instead. | Low | OPEN (disable native sign-ups in Auth settings so there is one path) |
+| SEC-006 | Sign-up does not verify email ownership: `public.sign_up` creates a confirmed account. Someone could register an address they do not own and then receive documents shared to that address. Password policy (8-72 chars, upper, lower, number, symbol) is enforced in the API and again in the function; a global cap of 30 new accounts per hour limits abuse. | Medium | ACCEPTED for the assessment demo (reviewers must be able to sign up instantly). Fix: turn on Supabase email confirmation and switch the route to `auth.signUp` |
+| SEC-007 | `public.sign_up` writes `auth.users` / `auth.identities` directly (the same shape Supabase uses), which is not a public Supabase API and could break on an Auth upgrade. | Low | ACCEPTED (covered by `npm run test:e2e` sign-up checks; same fix as SEC-006) |
 | SEC-005 | Presence uses a public Realtime channel `doc:<uuid>`: someone who knows a document id and the publishable key could see who has it open (names only, no content). | Low | ACCEPTED (ids are random UUIDs; private channels with RLS on realtime.messages is the fix) |
 
 ### Accepted or tracked elsewhere (do not re-report)
@@ -76,6 +78,9 @@ date. Say whether verification was source-level or live.
 | No server secret exists: the app uses only the publishable key; RLS is the boundary | `.env.example` | 2026-11-12, source |
 | Login does not enumerate accounts (one message for unknown email and wrong password) | `api/auth/login` | 2026-11-12, live |
 | Security headers: nosniff, frame DENY, referrer policy, permissions policy, HSTS | `next.config.ts` | 2026-11-12, live |
+| Commenters and viewers cannot edit; viewers cannot comment; nobody can comment as someone else or rewrite a comment's text | RLS `comments_*`, column grant `update(resolved)` | 2026-11-12, live (rls-check, e2e) |
+| Versions are written only by the trigger and readable only by people with access; restore requires owner or editor | `private.snapshot_version`, versions route | 2026-11-12, live |
+| Weak passwords are refused by the database even if the API is bypassed | `public.sign_up` | 2026-11-12, live (rls-check) |
 
 ## Needs validation (the exact missing fact)
 

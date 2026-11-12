@@ -1,0 +1,37 @@
+/* DocSpace design tokens. Mirror these in tailwind.config (see UI_SPEC.md section 2). */
+@font-face{font-family:"Inter";src:url("assets/fonts/Inter-Variable.woff2") format("woff2");font-weight:100 900;font-display:swap}
+@font-face{font-family:"Inter Tight";src:url("assets/fonts/InterTight-Variable.woff2") format("woff2");font-weight:100 900;font-display:swap}
+:root{
+  /* neutrals */
+  --bg:#f7f7f5;          /* app background, editor surround */
+  --surface:#ffffff;     /* cards, sidebar, page, dialogs */
+  --subtle:#f2f2f0;      /* hover rows, toolbar button hover, table header */
+  --muted:#ebebe8;       /* selected nav item, pressed */
+  --border:#e6e6e3;      /* default 1px border */
+  --border-strong:#d6d6d2; /* inputs, dividers that must read */
+  --text:#18181b;        /* primary text */
+  --text-2:#5f5f66;      /* secondary text */
+  --text-3:#6f6f76;      /* tertiary, placeholders, timestamps. 5.0:1 on white */
+  /* accent (the only colour) */
+  --accent:#3451d1;
+  --accent-hover:#2b44b8;
+  --accent-soft:#eef1fd;   /* active toolbar button, selected row tint */
+  --accent-ring:rgba(52,81,209,.28);
+  /* status */
+  --success:#1a7a43; --success-soft:#e8f5ee;
+  --warning:#a15c07; --warning-soft:#fdf3e1;
+  --danger:#c4352b;  --danger-soft:#fdeceb;
+  /* type */
+  --font-ui:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-display:"Inter Tight","Inter",ui-sans-serif,system-ui,sans-serif;
+  /* radii */
+  --r-sm:4px; --r-md:6px; --r-lg:8px; --r-xl:12px; --r-full:999px;
+  /* elevation (used only on floating layers) */
+  --shadow-pop:0 1px 2px rgba(16,16,20,.04),0 8px 24px -6px rgba(16,16,20,.12);
+  --shadow-dialog:0 1px 2px rgba(16,16,20,.06),0 24px 48px -12px rgba(16,16,20,.22);
+  --shadow-page:0 0 0 1px var(--border),0 1px 3px rgba(16,16,20,.04);
+  /* sizes */
+  --h-control:32px; --h-control-lg:36px; --sidebar-w:240px; --topbar-h:52px; --toolbar-h:44px;
+  --page-w:816px;
+  --ease:cubic-bezier(.2,.8,.2,1);
+}

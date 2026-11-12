@@ -3,7 +3,7 @@ import { useState } from "react";
 import { AlertCircle, CheckCircle2, Lock } from "lucide-react";
 import { api, ApiFailure, Avatar, Dialog, ICON, ICON_SM, Spinner, useToast } from "./ui";
 import { isValidEmail } from "@/lib/core/doc";
-import type { DocSummary, Profile, ShareRole } from "@/lib/core/types";
+import { ROLE_LABEL, type DocSummary, type Profile, type ShareRole } from "@/lib/core/types";
 
 type Msg = { kind: "err" | "ok"; text: string } | null;
 
@@ -50,7 +50,7 @@ export function ShareDialog({ doc, me, onClose, onChange }: {
     try {
       await api(`/api/documents/${doc.id}/share`, { method: "PATCH", json: { userId, role: next === "remove" ? null : next } });
       const name = prev.find((p) => p.user.id === userId)?.user.name;
-      toast(next === "remove" ? `Removed ${name}` : `${name} is now ${next === "viewer" ? "a viewer" : "an editor"}`);
+      toast(next === "remove" ? `Removed ${name}` : `${name} is now ${next === "editor" ? "an editor" : `a ${next}`}`);
     } catch (err) {
       update(prev);
       toast(err instanceof ApiFailure ? err.message : "Couldn't update access.", "err");
@@ -59,7 +59,7 @@ export function ShareDialog({ doc, me, onClose, onChange }: {
 
   return (
     <Dialog labelId="share-title" title={`Share "${doc.title}"`} onClose={onClose}
-      sub={isOwner ? "Editors can open and change this document. Viewers can only read it." : "People with access to this document."}
+      sub={isOwner ? "Editors can change it, commenters can comment, viewers can only read." : "People with access to this document."}
       footer={<button type="button" className="btn btn-secondary" onClick={onClose}>Done</button>}>
       {isOwner ? (
         <>
@@ -68,6 +68,7 @@ export function ShareDialog({ doc, me, onClose, onChange }: {
               aria-label="Email address" value={email} onChange={(e) => { setEmail(e.target.value); setMsg(null); }} />
             <select aria-label="Access level" value={role} onChange={(e) => setRole(e.target.value as ShareRole)}>
               <option value="editor">Editor</option>
+              <option value="commenter">Commenter</option>
               <option value="viewer">Viewer</option>
             </select>
             <button className="btn btn-primary" type="submit" disabled={busy} aria-label={busy ? "Sharing" : undefined}>
@@ -91,11 +92,12 @@ export function ShareDialog({ doc, me, onClose, onChange }: {
         <PersonRow user={owner} me={me} roleLabel="Owner" />
         {people.map((p) => (
           <PersonRow key={p.user.id} user={p.user} me={me} fresh={p.user.id === fresh}
-            roleLabel={p.role === "viewer" ? "Viewer" : "Editor"}
+            roleLabel={ROLE_LABEL[p.role]}
             control={isOwner ? (
               <select className="role-select" aria-label={`Access for ${p.user.name}`} value={p.role}
                 onChange={(e) => changeRole(p.user.id, e.target.value as ShareRole | "remove")}>
                 <option value="editor">Editor</option>
+                <option value="commenter">Commenter</option>
                 <option value="viewer">Viewer</option>
                 <option value="remove">Remove access</option>
               </select>

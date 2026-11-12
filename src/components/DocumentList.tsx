@@ -119,7 +119,7 @@ function Row({ doc, scope, meId, onShare, onDelete, onRenamed }: {
   const [renaming, setRenaming] = useState(false);
   const moreRef = useRef<HTMLButtonElement>(null);
   const isOwner = doc.ownerId === meId;
-  const canEdit = doc.role !== "viewer";
+  const canEdit = doc.role === "owner" || doc.role === "editor";
   const open = () => router.push(`/doc/${doc.id}`);
   const ownerName = isOwner ? "You" : doc.owner?.name ?? "Unknown";
   const sharedNames = doc.sharedWith.map((s) => s.user.name).join(", ");
@@ -157,7 +157,7 @@ function Row({ doc, scope, meId, onShare, onDelete, onRenamed }: {
                 {(p) => <span className="sh" {...p} tabIndex={-1}><Users {...ICON_SM} />{doc.sharedWith.length}</span>}
               </Tip>
             )}
-            {!renaming && scope === "shared" && doc.role === "viewer" && <span className="sh">View only</span>}
+            {!renaming && scope === "shared" && (doc.role === "viewer" || doc.role === "commenter") && <span className="sh">{doc.role === "viewer" ? "View only" : "Can comment"}</span>}
           </div>
           <span className="sub2">{ownerName} · {timeAgo(doc.updatedAt)}</span>
         </div>

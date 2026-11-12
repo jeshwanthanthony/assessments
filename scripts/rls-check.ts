@@ -65,6 +65,24 @@ async function main() {
     const stale = await maya.sb.from("documents").update({ title: "stale write" }).eq("id", id).eq("updated_at", "2000-01-01T00:00:00+00:00").select("id");
     check("write against a stale version matches nothing (conflict detection)", (stale.data ?? []).length === 0);
 
+    check("owner shares Daniel as commenter", (await maya.sb.rpc("update_share", { p_doc: id, p_user: daniel.id, p_role: "commenter" })).data?.status === "ok");
+    const cEdit = await daniel.sb.from("documents").update({ title: "commenter edit" }).eq("id", id).select("id");
+    check("commenter cannot edit", (cEdit.data ?? []).length === 0);
+    const cm = await daniel.sb.from("document_comments").insert({ document_id: id, author_id: daniel.id, body: "rls comment" }).select("id").single();
+    check("commenter can comment", !cm.error, cm.error?.message);
+    const vComment = await priya.sb.from("document_comments").insert({ document_id: id, author_id: priya.id, body: "viewer comment" });
+    check("viewer cannot comment", !!vComment.error);
+    const forgeAuthor = await daniel.sb.from("document_comments").insert({ document_id: id, author_id: maya.id, body: "forged" });
+    check("cannot comment as someone else", !!forgeAuthor.error);
+    const bodyEdit = await maya.sb.from("document_comments").update({ body: "rewritten" }).eq("id", cm.data?.id ?? "");
+    check("comment text cannot be rewritten (only resolved is updatable)", !!bodyEdit.error);
+    const vIns = await maya.sb.from("document_versions").insert({ document_id: id, title: "x", content: { type: "doc", content: [] } });
+    check("versions cannot be written directly (trigger only)", !!vIns.error);
+    check("versions are recorded by the trigger", ((await maya.sb.from("document_versions").select("id").eq("document_id", id)).data ?? []).length >= 1);
+    check("outsiders see no versions", ((await anon.from("document_versions").select("id")).data ?? []).length === 0);
+    const weak = await anon.rpc("sign_up", { p_email: "weak@docspace.test", p_password: "password", p_name: "Weak" });
+    check("database rejects a weak password on sign-up", weak.data?.status === "weak_password");
+
     check("owner removes viewer", (await maya.sb.rpc("update_share", { p_doc: id, p_user: priya.id, p_role: null })).data?.status === "ok");
     check("removed user loses access", !(await visible(priya.sb, id)));
     const profiles = (await priya.sb.from("profiles").select("email")).data ?? [];

@@ -179,13 +179,13 @@ export function initials(name: string): string {
 export type ShareStatus = "ok" | "not_owner" | "no_user" | "is_owner" | "already_shared" | "bad_role";
 
 /** Maps the database's share result to an HTTP status and the exact UI copy (UI_SPEC 4.6). */
-export function shareOutcome(status: ShareStatus, email: string, name?: string, role: "editor" | "viewer" = "editor"): { http: number; message: string } {
+export function shareOutcome(status: ShareStatus, email: string, name?: string, role: "editor" | "commenter" | "viewer" = "editor"): { http: number; message: string } {
   switch (status) {
-    case "ok": return { http: 200, message: `${name} can now ${role === "viewer" ? "view" : "edit"} this document.` };
+    case "ok": return { http: 200, message: `${name} can now ${role === "viewer" ? "view" : role === "commenter" ? "comment on" : "edit"} this document.` };
     case "no_user": return { http: 404, message: `No DocSpace account uses ${email}. Ask them to sign up first.` };
     case "is_owner": return { http: 409, message: "You already own this document." };
     case "already_shared": return { http: 409, message: `${name ?? email} already has access.` };
     case "not_owner": return { http: 403, message: "Only the owner can add people to this document." };
-    case "bad_role": return { http: 400, message: "Choose Editor or Viewer." };
+    case "bad_role": return { http: 400, message: "Choose Editor, Commenter or Viewer." };
   }
 }

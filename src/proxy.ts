@@ -20,7 +20,7 @@ export async function proxy(request: NextRequest) {
     },
   );
   const { data } = await sb.auth.getUser();
-  const isLogin = request.nextUrl.pathname === "/login";
+  const isLogin = request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/signup";
   if (!data.user && !isLogin) return NextResponse.redirect(new URL("/login", request.url));
   if (data.user && isLogin) return NextResponse.redirect(new URL("/", request.url));
   return response;

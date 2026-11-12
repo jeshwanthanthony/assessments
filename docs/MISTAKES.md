@@ -16,6 +16,33 @@ Steps / Broke / Why / THE FIX / Replay / Undo / Never again
 
 ## Entries (newest first)
 
+### BUG-2026-11-12-host-badge-covers-comment-button (found by the browser suite against production only)
+Steps: 1. Open a document on the live site at 1280x860. 2. Open Comments. 3. Type a comment and click Comment.
+Broke: the click hit Netlify's injected "Powered by Netlify" badge (fixed, bottom-right, about 184x51) instead of the button; locally there is no badge, so local runs passed.
+Why: the panel footer right-aligned its button into the corner the host reserves; toasts also sat in that corner.
+THE FIX: the Comment button is left-aligned in the panel footer; toasts sit 72 px from the bottom (`DocPanel.tsx`, `globals.css`).
+Replay: `BASE=https://docspace-ajaia.netlify.app npm run test:ui` (comments section).
+Undo: none.
+Never again: run the browser suite against the deployed site, not only locally; keep interactive controls out of the bottom-right corner.
+
+### MISTAKE-2026-11-12-test-doubleclicked-a-space (found by the browser suite)
+Steps: double-click the centre of a heading, then click "Comment on selection".
+Broke: the composer had no quoted text in the test.
+Why: the double-click landed on the space between two words, so nothing was selected. The app was right; the test input was wrong. Investigated by logging the selection at each step before changing anything.
+THE FIX: the test selects with Home, Shift+End. The app also falls back to the browser selection when the editor selection is empty (useful for read-only commenters).
+Replay: `npm run test:ui` ("comment composer quotes the selected text").
+Undo: none.
+Never again: when a UI test fails, log the state at each step before changing the app or the test.
+
+### MISTAKE-2026-11-12-tested-a-stale-server (found when new routes returned 404 locally)
+Steps: rebuild, then start `next start` while the previous server still holds port 3000.
+Broke: every new route answered 404 and the suite reported 15 failures that were not real.
+Why: `pkill` does not exist in this shell, so the old server kept serving the previous build.
+THE FIX: stop whatever listens on port 3000 (PowerShell `Get-NetTCPConnection -LocalPort 3000 ... Stop-Process`) before starting the new build.
+Replay: n/a (process step, recorded in docs/DEPLOYMENT.md "DocSpace specifics").
+Undo: none.
+Never again: confirm the server under test runs the build you just made before reading a test result.
+
 ### MISTAKE-2026-11-12-netlify-upload-skips-next-runtime (found by running the e2e suite against production)
 Steps: 1. Create a Netlify site through the API. 2. Deploy by uploading the source (no Git link). 3. Open any page.
 Broke: every route returned 404; the deploy summary said "No functions deployed", `plugin_state: none`.

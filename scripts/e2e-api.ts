@@ -114,8 +114,60 @@ async function main() {
     check("2 .pdf is rejected with a clear message", /isn't a .txt or .md file/.test((await up("budget.pdf", "%PDF-1.4")).body?.error?.message ?? ""));
     check("2 binary disguised as .txt is rejected", (await up("evil.txt", new Uint8Array([0xff, 0xfe, 0x00, 0x00, 0x41]))).status === 400);
     check("2 file over 1 MB is rejected", (await up("big.txt", "a".repeat(1024 * 1024 + 10))).status === 400);
+
+    // Sign-up with the password policy
+    const fresh = new Session();
+    const email = `e2e-${Date.now()}@docspace.test`;
+    const weak = await fresh.req("/api/auth/signup", { method: "POST", json: { name: "E2E User", email, password: "password1" } });
+    check("signup: weak password is 400", weak.status === 400 && weak.body?.error?.code === "weak_password", weak.body);
+    const noName = await fresh.req("/api/auth/signup", { method: "POST", json: { name: " ", email, password: "Str0ng#Pass" } });
+    check("signup: missing name is 400", noName.status === 400);
+    const su = await fresh.req("/api/auth/signup", { method: "POST", json: { name: "E2E  User", email, password: "Str0ng#Pass" } });
+    check("signup: strong password creates the account and signs in", su.status === 201 && (await fresh.req("/api/me")).body?.user?.name === "E2E User", su.body);
+    check("signup: same email again is 409", (await new Session().req("/api/auth/signup", { method: "POST", json: { name: "X", email, password: "Str0ng#Pass" } })).status === 409);
+    const relog = new Session();
+    check("signup: the new account can sign in", (await relog.req("/api/auth/login", { method: "POST", json: { email, password: "Str0ng#Pass" } })).status === 200);
+    const fid = (await fresh.req("/api/documents", { method: "POST", json: { title: "New user doc" } })).body?.id;
+    if (fid) created.push(`fresh:${fid}`);
+    check("signup: the new user can create a document", !!fid);
+    const toFresh = await maya.req(`/api/documents/${id}/share`, { method: "POST", json: { email, role: "viewer" } });
+    check("signup: other users can share with the new account", toFresh.status === 200);
+    await fresh.req(`/api/documents/${fid}`, { method: "DELETE" });
+
+    // Commenter role and comments
+    check("roles: share Daniel as commenter", (await maya.req(`/api/documents/${id}/share`, { method: "POST", json: { email: "daniel@docspace.dev", role: "commenter" } })).status === 200);
+    check("roles: commenter cannot edit", (await daniel.req(`/api/documents/${id}`, { method: "PATCH", json: { title: "x" } })).status === 403);
+    const c1 = await daniel.req(`/api/documents/${id}/comments`, { method: "POST", json: { body: "Can we tighten this goal?", quote: "Goals" } });
+    check("comments: commenter can comment with a quote", c1.status === 201 && c1.body?.comment?.quote === "Goals", c1.body);
+    const r1 = await maya.req(`/api/documents/${id}/comments`, { method: "POST", json: { body: "Yes, done.", parentId: c1.body?.comment?.id } });
+    check("comments: owner can reply", r1.status === 201 && r1.body?.comment?.parentId === c1.body?.comment?.id);
+    check("comments: empty comment is 400", (await maya.req(`/api/documents/${id}/comments`, { method: "POST", json: { body: "  " } })).status === 400);
+    const list = (await daniel.req(`/api/documents/${id}/comments`)).body?.comments ?? [];
+    check("comments: both see the thread", list.length === 2);
+    check("comments: commenter cannot delete the owner's reply", (await daniel.req(`/api/documents/${id}/comments/${r1.body?.comment?.id}`, { method: "DELETE" })).status === 403);
+    check("comments: resolve", (await maya.req(`/api/documents/${id}/comments/${c1.body?.comment?.id}`, { method: "PATCH", json: { resolved: true } })).status === 200);
+    const dShare = (await maya.req(`/api/documents/${id}`)).body.document.sharedWith.find((s: { user: { email: string } }) => s.user.email === "daniel@docspace.dev");
+    await maya.req(`/api/documents/${id}/share`, { method: "PATCH", json: { userId: dShare.user.id, role: "viewer" } });
+    check("comments: viewer cannot comment", (await daniel.req(`/api/documents/${id}/comments`, { method: "POST", json: { body: "hi" } })).status === 403);
+    check("comments: viewer can still read comments", ((await daniel.req(`/api/documents/${id}/comments`)).body?.comments ?? []).length === 2);
+
+    // Version history: Maya's session, then Daniel's session, then restore Maya's
+    await maya.req(`/api/documents/${id}/share`, { method: "PATCH", json: { userId: dShare.user.id, role: "editor" } });
+    await maya.req(`/api/documents/${id}`, { method: "PATCH", json: { content: doc("Maya's text") } });
+    await daniel.req(`/api/documents/${id}`, { method: "PATCH", json: { content: doc("Daniel's text") } });
+    const vers = (await maya.req(`/api/documents/${id}/versions`)).body?.versions ?? [];
+    check("versions: one per person's session, newest first", vers.length >= 2 && vers[0].savedBy?.name === "Daniel Okafor", vers.map((v: { savedBy?: { name: string } }) => v.savedBy?.name));
+    const mayaV = vers.find((v: { savedBy?: { name: string } }) => v.savedBy?.name === "Maya Chen");
+    const prev = await maya.req(`/api/documents/${id}/versions/${mayaV.id}`);
+    check("versions: preview returns that version's content", prev.body?.version?.content?.content?.[0]?.content?.[0]?.text === "Maya's text");
+    await maya.req(`/api/documents/${id}/share`, { method: "PATCH", json: { userId: dShare.user.id, role: "viewer" } });
+    check("versions: a viewer cannot restore", (await daniel.req(`/api/documents/${id}/versions/${mayaV.id}`, { method: "POST" })).status === 403);
+    const rs = await maya.req(`/api/documents/${id}/versions/${mayaV.id}`, { method: "POST" });
+    const after = (await maya.req(`/api/documents/${id}`)).body?.document?.content;
+    check("versions: owner restores; the document has the old content again", rs.status === 200 && after?.content?.[0]?.content?.[0]?.text === "Maya's text");
+    check("versions: restoring adds a version instead of deleting history", ((await maya.req(`/api/documents/${id}/versions`)).body?.versions ?? []).length >= vers.length);
   } finally {
-    for (const id of created) await maya.req(`/api/documents/${id}`, { method: "DELETE" });
+    for (const id of created.filter((x) => !x.startsWith("fresh:"))) await maya.req(`/api/documents/${id}`, { method: "DELETE" });
     check("cleanup: test documents deleted", (await maya.req(`/api/documents/${created[0]}`)).status === 404);
     check("sign out ends the session", (await maya.req("/api/auth/logout", { method: "POST" })).status === 200 && (await maya.req("/api/documents")).status === 401);
   }

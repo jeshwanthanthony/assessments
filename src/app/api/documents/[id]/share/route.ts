@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { fail, isUuid, readJson, requireUser } from "@/lib/server/supabase";
 import { shareDocument, updateShare } from "@/lib/server/documents";
 import { isValidEmail, shareOutcome } from "@/lib/core/doc";
+import type { ShareRole } from "@/lib/core/types";
 
 type Ctx = { params: Promise<{ id: string }> };
-const parseRole = (v: unknown): "editor" | "viewer" | null =>
-  v === "viewer" ? "viewer" : v === "editor" || v === undefined ? "editor" : null;
+const parseRole = (v: unknown): ShareRole | null =>
+  v === "viewer" || v === "commenter" ? v : v === "editor" || v === undefined ? "editor" : null;
 
 /** Owner grants access by email. The database function re-checks ownership. */
 export async function POST(req: Request, { params }: Ctx) {

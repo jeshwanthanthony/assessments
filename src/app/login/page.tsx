@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { AlertCircle, ArrowUpRight } from "lucide-react";
 import { api, ApiFailure, Avatar, ICON, Logo, Spinner } from "@/components/ui";
@@ -47,6 +48,7 @@ export default function LoginPage() {
             {busy ? <><Spinner />Signing in…</> : "Sign in"}
           </button>
         </form>
+        <p className="foot" style={{ marginTop: 14 }}>New to DocSpace? <Link href="/signup" className="link">Create an account</Link></p>
         <div className="divider">Demo accounts for reviewers</div>
         <div className="demo-accts">
           {DEMO_USERS.map((u) => (

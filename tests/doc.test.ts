@@ -81,3 +81,34 @@ describe("timeAgo", () => {
     expect(timeAgo("2026-11-11T08:00:00Z", now)).toBe("Yesterday");
   });
 });
+
+import { isStrongPassword, passwordProblems, signUpOutcome } from "../src/lib/core/auth";
+import { canComment, canEdit } from "../src/lib/core/types";
+
+describe("password policy", () => {
+  it("requires length, upper, lower, number and symbol", () => {
+    expect(isStrongPassword("Docspace#2026")).toBe(true);
+    expect(passwordProblems("docspace#2026")).toEqual(["One uppercase letter"]);
+    expect(passwordProblems("DOCSPACE#2026")).toEqual(["One lowercase letter"]);
+    expect(passwordProblems("Docspace#")).toEqual(["One number"]);
+    expect(passwordProblems("Docspace2026")).toEqual(["One symbol (e.g. ! @ # $)"]);
+    expect(passwordProblems("D#1a")).toEqual(["At least 8 characters"]);
+    expect(isStrongPassword("A1#" + "a".repeat(70))).toBe(false); // over 72 (bcrypt limit)
+  });
+  it("maps sign-up statuses to HTTP codes", () => {
+    expect(signUpOutcome("email_taken").http).toBe(409);
+    expect(signUpOutcome("weak_password").http).toBe(400);
+    expect(signUpOutcome("rate_limited").http).toBe(429);
+  });
+});
+
+describe("roles", () => {
+  it("only owners and editors edit; everyone but viewers comments", () => {
+    expect([canEdit("owner"), canEdit("editor"), canEdit("commenter"), canEdit("viewer")]).toEqual([true, true, false, false]);
+    expect([canComment("owner"), canComment("editor"), canComment("commenter"), canComment("viewer")]).toEqual([true, true, true, false]);
+  });
+  it("share copy names the role", async () => {
+    const { shareOutcome } = await import("../src/lib/core/doc");
+    expect(shareOutcome("ok", "x@y.dev", "Priya", "commenter").message).toBe("Priya can now comment on this document.");
+  });
+});

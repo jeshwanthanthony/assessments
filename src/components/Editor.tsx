@@ -6,17 +6,19 @@ import StarterKit from "@tiptap/starter-kit";
 import { Placeholder } from "@tiptap/extensions";
 import { createBrowserClient } from "@supabase/ssr";
 import {
-  AlertCircle, ArrowLeft, Bold, Check, ChevronDown, Cloud, Download, Eye, FileText, Italic, List, ListOrdered,
-  LogOut, Printer, Redo2, Underline, Undo2, UserPlus,
+  AlertCircle, ArrowLeft, Bold, Check, ChevronDown, Cloud, Download, Eye, FileText, History, Italic, List, ListOrdered,
+  LogOut, MessageSquare, MessageSquarePlus, Printer, Redo2, Underline, Undo2, UserPlus,
 } from "lucide-react";
 import { api, ApiFailure, Avatar, ICON, ICON_LG, ICON_SM, Menu, MenuItem, Spinner, Tip, useToast } from "./ui";
 import { ShareDialog } from "./ShareDialog";
+import { CommentsPanel, HistoryPanel } from "./DocPanel";
 import { signOut } from "./AppShell";
 import { docToMarkdown, normalizeTitle, type DocJSON } from "@/lib/core/doc";
-import type { DocFull, DocSummary, Profile } from "@/lib/core/types";
+import { canComment as roleCanComment, canEdit, type Comment, type DocFull, type DocSummary, type Profile, type Version } from "@/lib/core/types";
 
 type Save = "saved" | "unsaved" | "saving" | "error" | "conflict";
 const DEBOUNCE_MS = 800;
+const EMPTY = { type: "doc", content: [{ type: "paragraph" }] };
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 const k = (s: string) => (isMac ? s : s.replace(/⌘/g, "Ctrl+").replace(/⇧/g, "Shift+").replace(/⌥/g, "Alt+"));
 
@@ -79,7 +81,13 @@ function EditorView({ initial, me }: { initial: DocFull; me: Profile }) {
   const [save, setSave] = useState<Save>("saved");
   const [sharing, setSharing] = useState(false);
   const [others, setOthers] = useState<Profile[]>([]);
-  const readOnly = initial.role === "viewer";
+  const readOnly = !canEdit(initial.role);
+  const mayComment = roleCanComment(initial.role);
+  const [panel, setPanel] = useState<"comments" | "history" | null>(null);
+  const [comments, setComments] = useState<Comment[] | null>(null);
+  const [draftQuote, setDraftQuote] = useState<string | null>(null);
+  const [preview, setPreview] = useState<Version | null>(null);
+  const [historyKey, setHistoryKey] = useState(0);
   const isOwner = initial.ownerId === me.id;
 
   // Save pipeline: one request in flight; changes made meanwhile are saved right after.
@@ -105,6 +113,7 @@ function EditorView({ initial, me }: { initial: DocFull; me: Profile }) {
       });
       base.current = r.updatedAt;
       channelRef.current?.send({ type: "broadcast", event: "saved", payload: { by: me.id, updatedAt: r.updatedAt } });
+      setHistoryKey((k) => k + 1);
       if (hadError.current) { toast("All changes saved"); hadError.current = false; }
       inFlight.current = false;
       if (Object.keys(dirty.current).length) flush();
@@ -187,6 +196,9 @@ function EditorView({ initial, me }: { initial: DocFull; me: Profile }) {
         editorRef.current?.commands.setContent(r.document.content, { emitUpdate: false });
       } catch { /* the next save will surface any problem */ }
     });
+    ch.on("broadcast", { event: "comments" }, ({ payload }) => {
+      if (payload?.by !== me.id) loadCommentsRef.current();
+    });
     ch.subscribe((status) => {
       if (status === "SUBSCRIBED") ch.track({ id: me.id, name: me.name, email: me.email, color: me.color });
     });
@@ -217,6 +229,70 @@ function EditorView({ initial, me }: { initial: DocFull; me: Profile }) {
     toast("Exported as Markdown");
   }
 
+  // ---------- comments ----------
+  const loadCommentsRef = useRef<() => void>(() => {});
+  loadCommentsRef.current = () => {
+    api<{ comments: Comment[] }>(`/api/documents/${initial.id}/comments`)
+      .then((r) => setComments(r.comments))
+      .catch(() => setComments((c) => c ?? []));
+  };
+  useEffect(() => { loadCommentsRef.current(); }, []);
+  const notifyComments = () => channelRef.current?.send({ type: "broadcast", event: "comments", payload: { by: me.id } });
+
+  function startComment() {
+    if (editor) {
+      const { from, to } = editor.state.selection;
+      // The editor's selection, or the browser's (a read-only editor may not hold a selection).
+      const raw = from !== to ? editor.state.doc.textBetween(from, to, " ") : window.getSelection()?.toString() ?? "";
+      const text = raw.replace(/\s+/g, " ").trim();
+      setDraftQuote(text ? text.slice(0, 500) : null);
+    }
+    setPreview(null);
+    setPanel("comments");
+  }
+
+  // ---------- version preview and restore ----------
+  const previewEditor = useEditor({
+    immediatelyRender: false,
+    editable: false,
+    extensions: [StarterKit.configure({ heading: { levels: [1, 2, 3] }, code: false, codeBlock: false, blockquote: false, strike: false, horizontalRule: false, link: false })],
+    content: EMPTY,
+    editorProps: { attributes: { class: "doc", "aria-label": "Version preview", role: "document" } },
+  });
+  async function selectVersion(v: Version | null) {
+    setPreview(v);
+    if (!v || !previewEditor) return;
+    try {
+      const r = await api<{ version: { content: DocJSON } }>(`/api/documents/${initial.id}/versions/${v.id}`);
+      previewEditor.commands.setContent(r.version.content, { emitUpdate: false });
+    } catch {
+      toast("Couldn't load this version.", "err");
+      setPreview(null);
+    }
+  }
+  async function restore() {
+    if (!preview) return;
+    try {
+      if (Object.keys(dirty.current).length) await flush(true);
+      const r = await api<{ updatedAt: string; title: string; content: DocJSON }>(`/api/documents/${initial.id}/versions/${preview.id}`, { method: "POST" });
+      dirty.current = {};
+      base.current = r.updatedAt;
+      setTitle(r.title);
+      editor?.commands.setContent(r.content, { emitUpdate: false });
+      setSave("saved");
+      setPreview(null);
+      setHistoryKey((k) => k + 1);
+      channelRef.current?.send({ type: "broadcast", event: "saved", payload: { by: me.id, updatedAt: r.updatedAt } });
+      toast("Version restored");
+    } catch (err) {
+      toast(err instanceof ApiFailure ? err.message : "Couldn't restore this version.", "err");
+    }
+  }
+
+  const openThreads = (comments ?? []).filter((c) => !c.parentId && !c.resolved).length;
+  const roleNote = initial.role === "commenter"
+    ? `You can comment but not edit. Ask ${initial.owner?.name ?? "the owner"} for edit access.`
+    : `You have view-only access. Ask ${initial.owner?.name ?? "the owner"} for edit access.`;
   const back = isOwner ? "/" : "/shared";
   return (
     <div className="editor">
@@ -227,7 +303,7 @@ function EditorView({ initial, me }: { initial: DocFull; me: Profile }) {
           onChange={(e) => { setTitle(e.target.value); queue({ title: normalizeTitle(e.target.value) }); }}
           onBlur={() => { if (!title.trim()) { setTitle("Untitled document"); queue({ title: "Untitled document" }); } }}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); editor?.commands.focus(); } }} />
-        {readOnly ? <span className="ro-pill"><Eye {...ICON_SM} /><span className="lbl">View only</span></span> : <SaveStatus state={save} onRetry={() => flush()} onReload={reloadLatest} onKeep={() => flush(true)} />}
+        {readOnly ? <span className="ro-pill">{mayComment ? <MessageSquare {...ICON_SM} /> : <Eye {...ICON_SM} />}<span className="lbl">{mayComment ? "Can comment" : "View only"}</span></span> : <SaveStatus state={save} onRetry={() => flush()} onReload={reloadLatest} onKeep={() => flush(true)} />}
         <div className="grow" />
         {others.length > 0 && (
           <Tip label={`Also here: ${others.map((o) => o.name).join(", ")}`}>
@@ -239,14 +315,52 @@ function EditorView({ initial, me }: { initial: DocFull; me: Profile }) {
         {!isOwner && initial.owner && (
           <span className="shared-pill"><Avatar user={initial.owner} />Owned by {initial.owner.name}</span>
         )}
+        {mayComment && (
+          <Tip label="Comment on selection" kbd={k("⌘⌥M")}>
+            {(p) => <button type="button" className="icon-btn hide-sm" aria-label="Comment on selection" {...p}
+              onMouseDown={(e) => { e.preventDefault(); p.onMouseDown(); }} onClick={startComment}><MessageSquarePlus {...ICON} /></button>}
+          </Tip>
+        )}
+        <Tip label="Comments">
+          {(p) => <button type="button" className="icon-btn" style={{ position: "relative" }} aria-label={`Comments (${openThreads} open)`} aria-pressed={panel === "comments"} {...p}
+            onClick={() => { setPreview(null); setPanel((x) => (x === "comments" ? null : "comments")); }}>
+            <MessageSquare {...ICON} />{openThreads > 0 && <span className="tb-badge" aria-hidden="true">{openThreads}</span>}
+          </button>}
+        </Tip>
+        <Tip label="Version history">
+          {(p) => <button type="button" className="icon-btn" aria-label="Version history" aria-pressed={panel === "history"} {...p}
+            onClick={() => { setPreview(null); setPanel((x) => (x === "history" ? null : "history")); }}><History {...ICON} /></button>}
+        </Tip>
         <ExportMenu onMarkdown={exportMarkdown} />
-        <button type="button" className="btn btn-accent" onClick={() => setSharing(true)}><UserPlus {...ICON} />Share</button>
+        <button type="button" className="btn btn-accent" onClick={() => setSharing(true)}><UserPlus {...ICON} /><span className="share-lbl">Share</span></button>
         <AccountButton me={me} />
       </header>
-      {!readOnly && editor && <Toolbar editor={editor} />}
-      <div className="canvas">
-        <div className="paper"><EditorContent editor={editor} /></div>
-        {readOnly && <p className="readonly-note"><Eye {...ICON_SM} />You have view-only access. Ask {initial.owner?.name ?? "the owner"} for edit access.</p>}
+      {!readOnly && editor && !preview && <Toolbar editor={editor} />}
+      <div className="editor-body">
+        <div className="canvas"
+          onKeyDown={(e) => { if (mayComment && e.altKey && (e.metaKey || e.ctrlKey) && e.code === "KeyM") { e.preventDefault(); startComment(); } }}>
+          {preview && (
+            <div className="preview-banner" role="status">
+              <History {...ICON_SM} />
+              <span className="grow">Previewing {new Date(preview.updatedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} by {preview.savedBy?.name ?? "unknown"}</span>
+              <button type="button" className="btn btn-secondary" style={{ height: 28 }} onClick={() => setPreview(null)}>Back to current</button>
+              {!readOnly && <button type="button" className="btn btn-accent" style={{ height: 28 }} onClick={restore}>Restore this version</button>}
+            </div>
+          )}
+          <div className="paper" style={preview ? { display: "none" } : undefined}><EditorContent editor={editor} /></div>
+          {preview && <div className="paper"><EditorContent editor={previewEditor} /></div>}
+          {readOnly && !preview && <p className="readonly-note">{mayComment ? <MessageSquare {...ICON_SM} /> : <Eye {...ICON_SM} />}{roleNote}</p>}
+        </div>
+        {panel === "comments" && (
+          <CommentsPanel docId={initial.id} me={me} ownerId={initial.ownerId} canComment={mayComment}
+            comments={comments} setComments={(f) => setComments((c) => f(c ?? []))}
+            draftQuote={draftQuote} clearQuote={() => setDraftQuote(null)} editor={editor}
+            onClose={() => setPanel(null)} notify={notifyComments} />
+        )}
+        {panel === "history" && (
+          <HistoryPanel docId={initial.id} canRestore={!readOnly} selected={preview?.id ?? null} refreshKey={historyKey}
+            onSelect={selectVersion} onClose={() => { setPreview(null); setPanel(null); }} />
+        )}
       </div>
       {sharing && (
         <ShareDialog doc={{ ...summary, title }} me={me} onClose={() => setSharing(false)}

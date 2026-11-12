@@ -86,6 +86,34 @@ async function main() {
   await shot(page, "23-share-success");
   await page.keyboard.press("Escape");
 
+  // comments: select text, comment on it, reply, resolve
+  await page.locator(".tiptap h1").click();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("Shift+End");
+  await page.getByRole("button", { name: "Comment on selection" }).click();
+  await page.getByLabel("New comment").fill("Is this the right heading?");
+  check("comment composer quotes the selected text", await page.locator(".compose-quote").isVisible());
+  await page.locator(".panel-f").getByRole("button", { name: "Comment" }).click();
+  await page.locator(".thread").first().waitFor();
+  check("comment thread appears with its quote", (await page.locator(".thread .quote").first().textContent())?.length !== 0);
+  check("open comment count shows on the toolbar", (await page.locator(".tb-badge").textContent()) === "1");
+  await page.locator(".thread").getByRole("button", { name: "Reply" }).click();
+  await page.getByLabel("Reply").fill("Yes, keep it.");
+  await page.locator(".thread").getByRole("button", { name: "Reply" }).click();
+  await page.locator(".thread .cmt").nth(1).waitFor();
+  check("reply is added to the thread", (await page.locator(".thread .cmt").count()) === 2);
+  await shot(page, "40-comments");
+  await page.locator(".thread").getByRole("button", { name: "Resolve" }).click();
+  await page.getByText("No open comments", { exact: false }).waitFor();
+  check("resolving moves the thread out of Open", true);
+
+  // version history: open, preview the current list
+  await page.getByRole("button", { name: "Version history" }).click();
+  await page.locator(".ver").first().waitFor();
+  check("version history lists at least the current version", (await page.locator(".ver").count()) >= 1);
+  await shot(page, "41-history");
+  await page.getByRole("button", { name: "Close version history" }).click();
+
   // import dialog validation
   await page.goto(BASE + "/");
   await page.locator(".page-head").getByRole("button", { name: "Import" }).click();
@@ -112,6 +140,31 @@ async function main() {
   await page.locator(".presence .av").first().waitFor({ timeout: 8000 }).catch(() => {});
   check("presence shows the other person viewing", (await page.locator(".presence .av").count()) >= 1);
   await shot(page, "25-presence");
+
+  // ---------- sign-up ----------
+  const anonCtx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+  const sp = await anonCtx.newPage();
+  sp.on("pageerror", (e) => errors.push(e.message));
+  await sp.goto(BASE + "/login");
+  await sp.getByRole("link", { name: "Create an account" }).click();
+  await sp.waitForURL(/\/signup$/);
+  await sp.fill("#name", "UI Tester");
+  await sp.fill("#email", `ui-${Date.now()}@docspace.test`);
+  await sp.fill("#pw", "weakpass");
+  await sp.fill("#pw2", "weakpass");
+  await sp.getByRole("button", { name: "Create account" }).click();
+  check("sign-up blocks a weak password and marks the unmet rules", (await sp.locator(".pw-rules li.bad").count()) === 3);
+  await shot(sp, "42-signup-weak");
+  await sp.fill("#pw", "Str0ng#Pass");
+  check("password checklist turns green as rules are met", (await sp.locator(".pw-rules li.ok").count()) === 5);
+  await sp.getByRole("button", { name: "Create account" }).click();
+  check("mismatched confirmation is caught", await sp.getByText("Passwords don't match.").isVisible());
+  await sp.fill("#pw2", "Str0ng#Pass");
+  await sp.getByRole("button", { name: "Create account" }).click();
+  await sp.waitForURL(BASE + "/");
+  await sp.getByText("No documents yet").waitFor();
+  check("a new account lands on an empty My documents", true);
+  await anonCtx.close();
 
   // ---------- phone ----------
   const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, storageState: await ctx.storageState() });

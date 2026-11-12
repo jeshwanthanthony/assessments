@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { fail, isUuid, readJson, requireUser } from "@/lib/server/supabase";
 import { deleteDocument, getDocument, updateDocument } from "@/lib/server/documents";
 import { isDocJSON, LIMITS, normalizeTitle, type DocJSON } from "@/lib/core/doc";
+import { canEdit } from "@/lib/core/types";
 
 type Ctx = { params: Promise<{ id: string }> };
 const notFound = () =>
@@ -42,7 +43,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
       // No row matched: a viewer, no access, or a newer version saved by someone else.
       const doc = await getDocument(auth.sb, auth.user.id, id);
       if (!doc) return notFound();
-      if (doc.role === "viewer") return fail(403, "read_only", "You can view this document but not edit it.");
+      if (!canEdit(doc.role)) return fail(403, "read_only", "You can view this document but not edit it.");
       return NextResponse.json(
         { error: { code: "conflict", message: "Someone else saved a newer version." }, latest: doc },
         { status: 409 },
