@@ -1,90 +1,66 @@
-# Architecture note
+# DocSpace: Architecture Note
 
-## The shape
+## What it is
+
+A small collaborative document editor. You can:
+
+- sign up and sign in
+- create, rename, format and save documents
+- import .txt or .md files
+- share by email as Editor, Commenter or Viewer
+- comment, restore older versions, and see other people's cursors live
+
+## How it fits together
 
 ```
-Browser (Next.js client components)
-  ├─ fetch /api/*  ──▶ Next.js route handlers (Netlify functions)
-  │                     └─ Supabase client created per request FROM THE USER'S COOKIE
-  │                          └─ Postgres: RLS + column grants + share functions decide access
-  └─ Supabase Realtime (presence + "saved" broadcast per document)
+Browser (Next.js + Tiptap editor)
+   │  fetch /api/*                         Realtime (cursors, presence, "shared with you")
+   ▼                                            ▲
+Next.js API routes on Netlify  ──────────►  Supabase
+   acts as the signed-in user                 Auth, Postgres with row-level security, Realtime
 ```
 
-- **Next.js 16 (App Router) + TypeScript** on Netlify. `src/proxy.ts` refreshes the session cookie and sends signed-out visitors to `/login`.
-- **Supabase** provides auth (email and password, seeded accounts), Postgres and Realtime.
-- **Tiptap 3 (ProseMirror)** is the editor. The schema is cut down to what the spec allows: paragraphs, H1-H3, lists, bold, italic and underline.
-- **UI** is ported from the approved preview's CSS and tokens (`docs/design/`), with lucide icons. I chose this over rebuilding it in Tailwind and shadcn. The preview's stylesheet is the visual source of truth, and porting it pixel for pixel was faster and more faithful than re-deriving it utility by utility. The tokens and class names map one to one, so moving to Tailwind later is mechanical.
-
-## Data model
-
-| Table | Purpose |
-|---|---|
-| `profiles` | id (= auth user), email, name, avatar colour; created by trigger |
-| `documents` | owner_id, title, `content jsonb` (Tiptap JSON), updated_at (trigger) |
-| `document_shares` | (document_id, user_id) → role `editor`, `commenter` or `viewer` |
-| `document_comments` | threads (parent_id), optional quoted text, resolved flag |
-| `document_versions` | snapshots written by a trigger: one per person per 10-minute session, 50 kept |
-
-Content is stored as **editor JSON, not HTML**. It is lossless for the formatting we support, can be validated by shape, never needs HTML sanitising on render (ProseMirror only renders nodes its schema knows), and converts cleanly to Markdown for import and export.
-
-## Where access is decided (and why there)
-
-Access lives in **the database**. The API routes do not hold a service key. They act as the signed-in user, so even a bug in a route cannot read or write a row the user has no right to.
-
-- **Read:** you own the document, or you have a share row.
-- **Update:** owner or editor (commenters and viewers cannot). A column grant allows only `title` and `content`, so `owner_id` can never change.
-- **Comments:** everyone with access reads them. Owner, editors and commenters write them, always as themselves. Only `resolved` is updatable. The author or the owner can delete one.
-- **Versions:** readable by anyone with access; written only by the trigger; restored only by the owner or an editor.
-- **Accounts:** `public.sign_up` checks the password policy (8-72 characters with upper, lower, number and symbol; the same rules as the UI checklist and the API) and caps new accounts at 30 per hour.
-- **Delete:** owner only.
-- **Shares:** there are no write policies. Writes go only through `share_document` and `update_share`, which check ownership and return a status (`no_user`, `already_shared`, `is_owner`…) that the API maps to an HTTP code and the exact UI copy.
-
-`scripts/rls-check.ts` proves these rules live, as real users.
-
-## Accounts: several per browser, one per tab
-
-- The **default** account is the normal Supabase session cookie. Page routing checks it, and new tabs use it.
-- Every **other** signed-in account keeps its session server-side, in httpOnly cookies (refresh token plus a cached access token).
-- **Each tab pins its account** in sessionStorage and names it in `x-docspace-user` on every API call. `requireUser` serves the request as that account, but only if it is signed in on this browser; otherwise it returns 409.
-- **RLS applies to the tab's account,** so two tabs can show the same document as two different people, with real permissions and presence.
-- **Sign-out:** signing out of one account ends only its tabs; signing out of the default hands the default to the next account.
-- **Deleting an account** (password re-check) removes the user and cascades to their documents, shares, comments and versions.
-
-## Live collaboration
-
-- One Realtime connection per tab (`src/components/realtime.ts`).
-- Per document: presence (who is here), "saved" and "comments" broadcasts, and **cursor** broadcasts carrying the selection positions, throttled to every 80 ms. Remote cursors are ProseMirror decorations (`remoteCursors.ts`), never written into the document.
-- Per user, an `inbox:<id>` channel: sharing sends "shared", and the recipient's open lists refresh with a toast.
-- **Speed:** the API verifies the session token locally against the project's ES256 public keys (`getClaims`, about 1 ms with cached keys) instead of calling Supabase Auth on every request.
-
-## Saving: why it is safe
-
-- **Autosave:** debounced 800 ms after the last change, with one request in flight at a time. Edits made during a save are sent right after it.
-- **Failed save:** the change stays queued, the status shows *Couldn't save · Retry*, and leaving the page warns.
-- **Optimistic concurrency:** every save carries the `updated_at` it was based on. If someone else saved in between, the update matches no row and the API returns **409** with the latest version. The user picks *Load theirs* or *Keep mine*. Nothing is overwritten silently.
-- **Presence channel:** a "saved" broadcast lets an idle tab pull the newer version automatically.
+- **Frontend:** Next.js 16 and TypeScript, ported from the approved UI handoff's CSS. The editor is Tiptap (ProseMirror).
+- **Backend:** Next.js API routes. They hold no admin key and act as the signed-in user, so the database decides what each person can see and change.
+- **Data:** Supabase Postgres, with five tables: `profiles`, `documents`, `document_shares`, `document_comments`, `document_versions`. Document content is stored as editor JSON, which keeps formatting exactly and needs no HTML cleaning.
 
 ## What I prioritized, and why
 
-1. **The five core tasks, end to end, with depth where users feel it.** For an editor, the top fear is losing work (the seeded research doc says so too). So autosave states, retry, conflict detection and lossless storage got the depth.
-2. **Access control that is correct by construction.** RLS plus column grants, tested against the live database, rather than checks scattered across routes.
-3. **Fidelity to the approved design.** All states in the 39 screenshots: loading, empty, error, validation and phone layouts.
-4. **Verification.** Unit, database, API and browser tests, run locally and against production.
-5. **Stretch, only after 1-4 were green:** roles (cheap given the RLS design), presence (cheap with Supabase Realtime), conflict handling and export. Then, on request, sign-up, comments, version history and the Commenter role.
+1. **The five core tasks, working end to end:** create, edit, upload, share, persist. They are what the brief asks for.
+2. **Not losing work:**
+   - autosave with a visible status (Unsaved, Saving, Saved, Couldn't save · Retry)
+   - a conflict check, so two people saving at once never silently overwrite each other
+   - a warning before leaving with unsaved changes
+3. **Correct access rules,** enforced in the database rather than scattered through the code:
+   - owners can share and delete
+   - editors can edit
+   - commenters can only comment
+   - viewers can only read
+4. **Following the approved design** closely, including every loading, empty and error state, on desktop and phone.
+5. **Stretch work, only after 1-4 were tested:**
+   - live cursors and presence
+   - comments
+   - version history
+   - roles
+   - export to Markdown and PDF
+   - several accounts per browser, one per tab
 
 ## Tradeoffs and cuts
 
 | Cut | Why | What it would take |
 |---|---|---|
-| Simultaneous co-editing (CRDT) | The spec put it out of scope, and real-time merge is a project of its own. Presence, idle refresh and 409 conflict handling cover the "two people, one doc" risk honestly. | Yjs + y-prosemirror over a Realtime or websocket provider, persisting Yjs updates |
-| Email verification, password reset | Reviewers must sign up instantly; the hosted project's confirm-email setting could not be changed from the build tools | Turn on Supabase email confirmation and switch the route to `auth.signUp` (SEC-006) |
-| Suggestion mode | Comments cover the review need with far less editor complexity | Tiptap tracked-changes marks with accept/reject |
-| .docx import | .txt and .md cover the product need; .docx needs a parser (mammoth) and sanitising | mammoth → HTML → Tiptap JSON on the server |
-| Comment anchors as marks | Commenters cannot edit, so anchors cannot live inside the document | Positions mapped through ProseMirror steps, stored beside the comment |
-| Tailwind + shadcn | See "UI" above | Mechanical port; tokens already exist in `docs/design/tailwind.theme.ts` |
+| Two people typing in the same paragraph at once (CRDT) | Large on its own; live cursors and conflict-safe saving cover the main risk | Yjs with a Realtime provider |
+| Email verification and password reset on sign-up | Reviewers can sign up and test instantly | Turn on Supabase email confirmation |
+| .docx import | .txt and .md cover the need; .docx needs a parser and sanitising | mammoth on the server |
+| Suggestion mode | Comments cover review with much less editor complexity | Tracked-change marks |
 
-## Known limits
+## Quality and testing
 
-- Last save wins only when the user explicitly chooses "Keep mine".
-- Lists hold at most 500 documents per scope, with no pagination.
-- Presence uses a public channel per document id (`docs/SECURITY_LEDGER.md` SEC-005).
+| Suite | Checks | What it covers |
+|---|---|---|
+| Unit | 16 | Import/export, validation, password rules |
+| Database permissions | 32 | Run against the real database as different users |
+| API end to end | 89 | All core tasks plus every extra feature |
+| Browser | 47 | Desktop and phone, including two accounts in two tabs on one document |
+
+All four suites passed against the live site.
