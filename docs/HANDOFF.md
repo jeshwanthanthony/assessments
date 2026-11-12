@@ -49,5 +49,5 @@ Nothing is in flight.
 ## 8. Exact next steps
 
 1. Push to a Git remote and connect Netlify to it for deploy previews.
-2. Close SEC-004 (disable sign-ups or build a sign-up screen).
+2. In Supabase Auth settings: disable native sign-ups (SEC-004) and turn on email confirmation, then switch /api/auth/signup to auth.signUp (SEC-006).
 3. Next candidate: suggestion mode, or email verification + password reset.
