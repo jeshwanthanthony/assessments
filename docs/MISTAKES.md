@@ -5,7 +5,17 @@
 1. Every bug found by clicking, by a test, by the owner or by a user gets an entry here, newest first, in the same commit as its fix: steps, what broke, why, THE FIX, the replay test, the undo, and a "never again" line.
 2. Our own mistakes count too (a wrong assumption, a test that proved the wrong thing).
 3. Before every push and deploy, re-run the replay of every entry whose area the change touches.
-4. Replays never touch real users' data: they use demo accounts and delete what they create.
+4. Replays never touch real users' data: they use sample or throwaway `@docspace.test` accounts and delete what they create.
+
+## Index
+
+| Kind | Entries |
+|---|---|
+| Reported by the owner | BUG stale-tab-acts-as-another-account |
+| Found by tests | deleted-account-cookie-kept, host-badge-covers-comment-button, insert-returning-blocked-by-rls |
+| Found by tools (advisor, audit, deploy) | security-definer-exposed-over-rest, pinned-vulnerable-next, netlify-upload-skips-next-runtime |
+| Our own process mistakes | aborted-tests-leave-data, shell-ate-template-strings, tested-a-stale-server |
+| Tests that proved the wrong thing | test-matched-route-announcer, test-doubleclicked-a-space, test-compared-jsonb-as-string, test-typed-before-focus-returned |
 
 ## Entry format
 
@@ -15,6 +25,42 @@ Steps / Broke / Why / THE FIX / Replay / Undo / Never again
 ```
 
 ## Entries (newest first)
+
+### MINE-2026-11-12-aborted-tests-leave-data (found while reviewing the account-menu screenshot)
+Steps: 1. Run `npm run test:ui` against a build where a check throws midway (it happened during the comment and live-share work). 2. Open Maya's My documents.
+Broke: six copies of "UI test document" and an "Imported notes" stayed in a sample account that reviewers use.
+Why: the browser test deletes what it created only at the very end, so an aborted run skips the cleanup.
+THE FIX (partial): removed by SQL each time. The lasting fix, a `finally` block in `scripts/e2e-ui.ts`, is still open (HANDOFF section 5).
+Replay: run `npm run test:ui`, stop it midway, check Maya's list.
+Undo: delete the leftover test documents from the sample account.
+Never again: a test that writes to shared data cleans up in `finally`, not at the end.
+
+### MINE-2026-11-12-shell-ate-template-strings (happened three times)
+Steps: write a file containing JavaScript template strings through a bash heredoc or `node -e "..."`.
+Broke: the shell treated the backticks as command substitution; files were written with empty arguments (`multi.req(, asDaniel)`) or the command failed with "unexpected EOF". Caught by `tsc` each time, never shipped.
+Why: shell quoting rules apply before the text reaches the file.
+THE FIX: rewrote the affected lines with the editor tool.
+Replay: `npx tsc --noEmit` after any scripted edit.
+Undo: none.
+Never again: TypeScript with template strings is written with the editor tool, never through the shell.
+
+### MINE-2026-11-12-pinned-vulnerable-next (found by npm audit right after the first install)
+Steps: `npm i next@15.1.3 ...`, then `npm audit`.
+Broke: nothing shipped. Audit reported a critical Next.js advisory, plus high-severity ones in transitive packages.
+Why: versions were picked from memory instead of from the registry.
+THE FIX: checked `npm view <pkg> time`, reinstalled on patched versions (Next 16.4.6, Tiptap 3.33.1); `npm audit` reports 0.
+Replay: `npm audit --audit-level=high`.
+Undo: none.
+Never again: look up current versions and run `npm audit` before writing code on a new dependency set.
+
+### MINE-2026-11-12-test-matched-route-announcer (found by the browser suite)
+Steps: wrong password on the login page; the test waited for `getByRole("alert")`.
+Broke: the check failed although the red alert was on screen.
+Why: Next.js renders a hidden route announcer with role="alert"; the locator matched it first.
+THE FIX: the test targets `.alert.danger`.
+Replay: `npm run test:ui` ("wrong password shows the inline alert").
+Undo: none.
+Never again: role locators must be scoped when the framework adds its own landmarks.
 
 ### BUG-2026-11-12-deleted-account-cookie-kept (found by the e2e suite after the speed change)
 Steps: 1. Switch session checks to local token verification. 2. Delete an account. 3. Call /api/me with the same browser.

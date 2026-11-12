@@ -29,6 +29,9 @@ doc is created; remove it the day the doc is deleted.
 | `docs/TESTING.md` | Which suites cover which area, and what to run after changing X | a suite is added, moved or retired |
 | `docs/DECISIONS.md` | Settled choices and why | a choice is made that a future agent might undo |
 | `docs/SCALING.md` | Known weak points under many users, with the fix and its cost | a change touches, worsens or adds a weak point |
+| `docs/GUIDE.md` | Full guide: setup, features, tests | features or commands change |
+| `docs/AI_WORKFLOW.md` | How AI was used, what was changed or rejected, how it was verified | the workflow or verification changes |
+| `docs/reference/` | Original brief, UI handoff, playbook: never edited | never |
 
 ## Local AGENTS.md files (rules for a code area, next to the code)
 
