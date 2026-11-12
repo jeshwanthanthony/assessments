@@ -9,10 +9,10 @@ import {
   AlertCircle, ArrowLeft, Bold, Check, ChevronDown, Cloud, Download, Eye, FileText, History, Italic, List, ListOrdered,
   LogOut, MessageSquare, MessageSquarePlus, Printer, Redo2, Underline, Undo2, UserPlus,
 } from "lucide-react";
-import { api, ApiFailure, Avatar, ICON, ICON_LG, ICON_SM, Menu, MenuItem, Spinner, Tip, useToast } from "./ui";
+import { api, ApiFailure, Avatar, ICON, ICON_LG, ICON_SM, Menu, MenuItem, onAuthChange, setExpectedUser, Spinner, Tip, useToast } from "./ui";
 import { ShareDialog } from "./ShareDialog";
 import { CommentsPanel, HistoryPanel } from "./DocPanel";
-import { signOut } from "./AppShell";
+import { AccountMenu } from "./AccountMenu";
 import { docToMarkdown, normalizeTitle, type DocJSON } from "@/lib/core/doc";
 import { canComment as roleCanComment, canEdit, type Comment, type DocFull, type DocSummary, type Profile, type Version } from "@/lib/core/types";
 
@@ -36,12 +36,14 @@ export function Editor({ id }: { id: string }) {
       ]);
       setDoc(d.document);
       setMe(m.user);
+      setExpectedUser(m.user.id);
       setLoad("ready");
     } catch (err) {
       setLoad(err instanceof ApiFailure && (err.status === 404 || err.status === 403) ? "missing" : "error");
     }
   }, [id]);
   useEffect(() => { fetchDoc(); }, [fetchDoc]);
+  useEffect(() => onAuthChange(() => { api("/api/me").catch(() => {}); }), []);
 
   if (load === "ready" && doc && me) return <EditorView initial={doc} me={me} />;
   return (
@@ -451,9 +453,9 @@ function ExportMenu({ onMarkdown }: { onMarkdown: () => void }) {
   const ref = useRef<HTMLButtonElement>(null);
   return (
     <>
-      <Tip label="Export">
-        {(p) => <button ref={ref} type="button" className="icon-btn" aria-label="Export" aria-haspopup="menu" aria-expanded={open} {...p}
-          onClick={() => setOpen((o) => !o)}><Download {...ICON} /></button>}
+      <Tip label="Export as PDF or Markdown">
+        {(p) => <button ref={ref} type="button" className="btn btn-ghost export-btn" aria-label="Export as PDF or Markdown" aria-haspopup="menu" aria-expanded={open} {...p}
+          onClick={() => setOpen((o) => !o)}><Download {...ICON} /><span className="export-lbl">Export</span></button>}
       </Tip>
       {open && (
         <Menu anchor={ref} onClose={() => setOpen(false)} align="end" label="Export">
@@ -471,17 +473,10 @@ function AccountButton({ me }: { me: Profile }) {
   const ref = useRef<HTMLButtonElement>(null);
   return (
     <>
-      <button ref={ref} type="button" className="icon-btn" style={{ width: 28 }} aria-label="Account" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+      <button ref={ref} type="button" className="icon-btn" style={{ width: 28 }} aria-label="Accounts" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         <Avatar user={me} />
       </button>
-      {open && (
-        <Menu anchor={ref} onClose={() => setOpen(false)} align="end" label="Account">
-          <div className="hd">{me.email}</div>
-          <MenuItem icon={<FileText {...ICON} />} onSelect={() => { window.location.href = "/"; }}>My documents</MenuItem>
-          <div className="sep" />
-          <MenuItem icon={<LogOut {...ICON} />} onSelect={signOut}>Sign out</MenuItem>
-        </Menu>
-      )}
+      {open && <AccountMenu anchor={ref} onClose={() => setOpen(false)} me={me} align="end" showDocsLink />}
     </>
   );
 }

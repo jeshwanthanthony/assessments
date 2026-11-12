@@ -3,10 +3,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronsUpDown, FileText, LogOut, Menu as MenuIcon, Plus, Upload, Users } from "lucide-react";
-import { api, Avatar, ICON, Logo, Menu, MenuItem, Spinner, useToast } from "./ui";
+import { announceAuthChange, api, Avatar, ICON, Logo, Menu, MenuItem, setExpectedUser, Spinner, useToast } from "./ui";
 import { useWorkspace, WorkspaceProvider } from "./workspace";
 import { ImportDialog } from "./ImportDialog";
-import { DEMO_PASSWORD, DEMO_USERS } from "@/lib/core/demo";
+import { AccountMenu } from "./AccountMenu";
 
 type ShellActions = { newDocument: () => Promise<void>; openImport: () => void; creating: boolean };
 const ShellCtx = createContext<ShellActions | null>(null);
@@ -17,7 +17,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 }
 
 export async function signOut() {
-  await api("/api/auth/logout", { method: "POST" }).catch(() => {});
+  await api("/api/auth/logout", { method: "POST", json: { all: true } }).catch(() => {});
+  setExpectedUser(null);
+  announceAuthChange();
   window.location.href = "/login";
 }
 
@@ -41,19 +43,6 @@ function Shell({ children }: { children: ReactNode }) {
       setCreating(false);
     }
   }, [toast]);
-
-  async function switchTo(email: string, name: string) {
-    setAcctOpen(false);
-    if (email === me?.email) return;
-    try {
-      await api("/api/auth/logout", { method: "POST" });
-      await api("/api/auth/login", { method: "POST", json: { email, password: DEMO_PASSWORD } });
-      await reload();
-      toast(`Switched to ${name}`);
-    } catch {
-      window.location.href = "/login";
-    }
-  }
 
   const count = (n: number) => (state === "ready" ? <span className="count">{n}</span> : null);
   const nav = (href: string, label: string, icon: ReactNode, n: number) => (
@@ -84,17 +73,7 @@ function Shell({ children }: { children: ReactNode }) {
             </button>
           )}
           {acctOpen && me && (
-            <Menu anchor={acctRef} onClose={() => setAcctOpen(false)} up label="Account">
-              <div className="hd">Switch demo account</div>
-              {DEMO_USERS.map((u) => (
-                <MenuItem key={u.email} onSelect={() => switchTo(u.email, u.name)} className="tall"
-                  icon={<Avatar user={u} />} right={u.email === me.email ? <Check {...ICON} className="chk" /> : undefined}>
-                  {u.name}
-                </MenuItem>
-              ))}
-              <div className="sep" />
-              <MenuItem icon={<LogOut {...ICON} />} onSelect={signOut}>Sign out</MenuItem>
-            </Menu>
+            <AccountMenu anchor={acctRef} onClose={() => setAcctOpen(false)} me={me} up />
           )}
         </aside>
         <div className="scrim" onClick={() => setNavOpen(false)} />

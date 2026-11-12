@@ -1,8 +1,9 @@
 import "server-only";
 import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
+import { clientFor } from "./accounts";
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -32,10 +33,24 @@ export function fail(http: number, code: string, message: string) {
 }
 
 /** Resolves the verified user (server-checked with Supabase Auth, never trusted from the client) or returns 401. */
+export const EXPECTED_USER_HEADER = "x-docspace-user";
+
+/**
+ * Resolves the verified user, or returns 401. If the page says which user it believes it is
+ * (x-docspace-user) and the session cookie now belongs to someone else (another tab switched
+ * account), refuse with 409 so a stale tab can never act as the wrong person.
+ */
 export async function requireUser(): Promise<{ sb: SupabaseClient; user: User } | NextResponse> {
   const sb = await supabaseServer();
-  const { data, error } = await sb.auth.getUser();
-  if (error || !data.user) return fail(401, "unauthenticated", "Sign in to continue.");
+  const { data } = await sb.auth.getUser();
+  const expected = (await headers()).get(EXPECTED_USER_HEADER);
+  if (expected && expected !== data.user?.id) {
+    // This tab uses another account signed in on this browser: act as it, or refuse if it is not signed in here.
+    const other = isUuid(expected) ? await clientFor(expected) : null;
+    if (other) return other;
+    return fail(409, "session_changed", "That account was signed out on this browser.");
+  }
+  if (!data.user) return fail(401, "unauthenticated", "Sign in to continue.");
   return { sb, user: data.user };
 }
 

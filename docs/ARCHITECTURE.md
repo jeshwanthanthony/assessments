@@ -41,6 +41,15 @@ Access lives in **the database**. The API routes do not hold a service key. They
 
 `scripts/rls-check.ts` proves these rules live, as real users.
 
+## Accounts: several per browser, one per tab
+
+- The **default** account is the normal Supabase session cookie. Page routing checks it, and new tabs use it.
+- Every **other** signed-in account keeps its session server-side, in httpOnly cookies (refresh token plus a cached access token).
+- **Each tab pins its account** in sessionStorage and names it in `x-docspace-user` on every API call. `requireUser` serves the request as that account, but only if it is signed in on this browser; otherwise it returns 409.
+- **RLS applies to the tab's account,** so two tabs can show the same document as two different people, with real permissions and presence.
+- **Sign-out:** signing out of one account ends only its tabs; signing out of the default hands the default to the next account.
+- **Deleting an account** (password re-check) removes the user and cascades to their documents, shares, comments and versions.
+
 ## Saving: why it is safe
 
 - **Autosave:** debounced 800 ms after the last change, with one request in flight at a time. Edits made during a save are sent right after it.

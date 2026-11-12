@@ -329,3 +329,10 @@ svg.i.sm{width:14px;height:14px}svg.i.lg{width:20px;height:20px}
 /* Keep clear of the host badge pinned to the bottom-right corner (about 184x51). */
 .toasts{bottom:72px}
 @media (max-width:640px){.toasts{bottom:72px}}
+.acct-txt{display:flex;flex-direction:column;min-width:0;line-height:16px}
+.acct-txt b{font-weight:500;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acct-txt span{font-size:12px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.menu .acct-row{max-width:280px}
+.menu button.danger-item,.menu button.danger-item svg{color:var(--danger)}
+.export-btn{padding:0 8px}
+@media (max-width:1024px){.export-lbl{display:none}.export-btn{width:28px;height:28px;padding:0}}

@@ -53,6 +53,7 @@ follow-up listed), ACCEPTED (owner, dated), NEEDS_VALIDATION.
 | SEC-003 | Supabase Auth leaked-password protection is off (advisor). Demo accounts use a public password by design. | Low | ACCEPTED (assessment demo; enable for real users) |
 | SEC-004 | Supabase's native sign-up endpoint is also enabled (email confirmation required there). The app's own sign-up goes through `public.sign_up` instead. | Low | OPEN (disable native sign-ups in Auth settings so there is one path) |
 | SEC-006 | Sign-up does not verify email ownership: `public.sign_up` creates a confirmed account. Someone could register an address they do not own and then receive documents shared to that address. Password policy (8-72 chars, upper, lower, number, symbol) is enforced in the API and again in the function; a global cap of 30 new accounts per hour limits abuse. | Medium | ACCEPTED for the assessment demo (reviewers must be able to sign up instantly). Fix: turn on Supabase email confirmation and switch the route to `auth.signUp` |
+| SEC-008 | Several accounts per browser: other accounts' refresh tokens (ds_accounts) and access tokens (ds_at_*) are stored in httpOnly, Secure, SameSite=Lax cookies, never readable by page scripts and never returned by any API. A tab picks its account with x-docspace-user, which the server honours only for an account signed in on that same browser (otherwise 409), so the header cannot reach anyone else's data. Anyone with access to the unlocked browser can use every account signed in on it, the same as Google's account switcher. | Low | ACCEPTED (by design; "Sign out of all accounts" clears them) |
 | SEC-007 | `public.sign_up` writes `auth.users` / `auth.identities` directly (the same shape Supabase uses), which is not a public Supabase API and could break on an Auth upgrade. | Low | ACCEPTED (covered by `npm run test:e2e` sign-up checks; same fix as SEC-006) |
 | SEC-005 | Presence uses a public Realtime channel `doc:<uuid>`: someone who knows a document id and the publishable key could see who has it open (names only, no content). | Low | ACCEPTED (ids are random UUIDs; private channels with RLS on realtime.messages is the fix) |
 
@@ -81,6 +82,8 @@ date. Say whether verification was source-level or live.
 | Commenters and viewers cannot edit; viewers cannot comment; nobody can comment as someone else or rewrite a comment's text | RLS `comments_*`, column grant `update(resolved)` | 2026-11-12, live (rls-check, e2e) |
 | Versions are written only by the trigger and readable only by people with access; restore requires owner or editor | `private.snapshot_version`, versions route | 2026-11-12, live |
 | Weak passwords are refused by the database even if the API is bypassed | `public.sign_up` | 2026-11-12, live (rls-check) |
+| A tab can act only as an account signed in on that browser; permissions follow that account; sign-out of one account ends only its tabs | `requireUser`, `src/lib/server/accounts.ts` | 2026-11-12, live (e2e "per-tab", "switcher") |
+| Delete account re-checks the password, cannot delete sample accounts, and removes the account, owned documents, shares, comments and its email's access | `public.delete_my_account`, `/api/account/delete` | 2026-11-12, live (e2e "delete") |
 
 ## Needs validation (the exact missing fact)
 

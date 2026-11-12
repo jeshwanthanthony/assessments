@@ -16,6 +16,15 @@ Steps / Broke / Why / THE FIX / Replay / Undo / Never again
 
 ## Entries (newest first)
 
+### BUG-2026-11-12-stale-tab-acts-as-another-account (reported by the owner with a screenshot)
+Steps: 1. Tab A: sign up as a new account, create "Doc". 2. Tab B (same browser): sign in as maya@docspace.dev. 3. Back in tab A (still showing the new account), Share "Doc" with Maya.
+Broke: "Only the owner can add people to this document." although tab A showed the new account as Owner.
+Why: one session cookie per browser. Tab B's sign-in replaced it, so tab A's requests ran as Maya; the database correctly refused. Confirmed in the Supabase auth logs (new account signed in 14:19:39, Maya 14:22:07, same browser) and by reproducing sharing as a new account via the database and the live API (both worked).
+THE FIX: each tab pins its account (sessionStorage) and sends x-docspace-user; the server keeps every signed-in account's session in httpOnly cookies and serves each request as the tab's account, or 409 if that account is no longer signed in on the browser (`requireUser`, `src/lib/server/accounts.ts`). Tabs tell each other about sign-ins/outs (BroadcastChannel). This also delivers per-tab accounts.
+Replay: `npm run test:e2e` ("per-tab", "switcher" rows), `npm run test:ui` (two tabs, one browser).
+Undo: "Sign out of all accounts".
+Never again: a browser tab must never act as an account other than the one it shows; every request names its account and the server verifies it.
+
 ### BUG-2026-11-12-host-badge-covers-comment-button (found by the browser suite against production only)
 Steps: 1. Open a document on the live site at 1280x860. 2. Open Comments. 3. Type a comment and click Comment.
 Broke: the click hit Netlify's injected "Powered by Netlify" badge (fixed, bottom-right, about 184x51) instead of the button; locally there is no badge, so local runs passed.

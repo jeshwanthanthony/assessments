@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { AlertCircle, Check, Circle, Eye, EyeOff } from "lucide-react";
-import { api, ApiFailure, ICON, ICON_SM, Logo, Spinner } from "@/components/ui";
+import { announceAuthChange, api, ApiFailure, setExpectedUser, ICON, ICON_SM, Logo, Spinner } from "@/components/ui";
 import { isStrongPassword, PASSWORD_RULES } from "@/lib/core/auth";
 import { isValidEmail } from "@/lib/core/doc";
 
@@ -32,6 +32,8 @@ export default function SignUpPage() {
     setError(null);
     try {
       await api("/api/auth/signup", { method: "POST", json: { name, email, password } });
+      setExpectedUser(null);
+      announceAuthChange();
       window.location.href = "/";
     } catch (err) {
       setError(err instanceof ApiFailure ? err.message : "Something went wrong. Try again.");
@@ -92,7 +94,7 @@ export default function SignUpPage() {
             {busy ? <><Spinner />Creating account…</> : "Create account"}
           </button>
         </form>
-        <p className="foot">Already have an account? <Link href="/login" className="link">Sign in</Link></p>
+        <p className="foot">Already have an account? <Link href="/login?add=1" className="link">Sign in</Link></p>
       </div>
     </main>
   );

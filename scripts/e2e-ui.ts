@@ -114,6 +114,13 @@ async function main() {
   await shot(page, "41-history");
   await page.getByRole("button", { name: "Close version history" }).click();
 
+  // export
+  await page.getByRole("button", { name: /Export/ }).click();
+  check("export menu offers Markdown and PDF", (await page.getByRole("menuitem", { name: /Markdown/ }).isVisible()) && (await page.getByRole("menuitem", { name: /PDF/ }).isVisible()));
+  await shot(page, "46-export-menu");
+  const [dl] = await Promise.all([page.waitForEvent("download"), page.getByRole("menuitem", { name: /Markdown/ }).click()]);
+  check("Markdown export downloads a .md named after the document", dl.suggestedFilename() === "UI test document.md");
+
   // import dialog validation
   await page.goto(BASE + "/");
   await page.locator(".page-head").getByRole("button", { name: "Import" }).click();
@@ -165,6 +172,55 @@ async function main() {
   await sp.getByText("No documents yet").waitFor();
   check("a new account lands on an empty My documents", true);
   await anonCtx.close();
+
+  // ---------- two accounts in two tabs of ONE browser, same document ----------
+  const one = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+  const tabA = await one.newPage();
+  tabA.on("pageerror", (e) => errors.push(e.message));
+  await tabA.goto(BASE + "/login");
+  await tabA.getByRole("button", { name: /Maya Chen/ }).click();
+  await tabA.waitForURL(BASE + "/");
+  await tabA.locator(".tr.row").first().waitFor();
+  const tabB = await one.newPage();
+  tabB.on("pageerror", (e) => errors.push(e.message));
+  await tabB.goto(BASE + "/login?add=1");
+  check("add-account page opens while signed in", await tabB.getByRole("heading", { name: "Add another account" }).isVisible());
+  await tabB.getByRole("button", { name: /Daniel Okafor/ }).click();
+  await tabB.waitForURL(BASE + "/");
+  await tabB.locator(".sidebar .me").getByText("Daniel Okafor").waitFor();
+  await tabA.reload();
+  await tabA.locator(".sidebar .me").waitFor();
+  check("tab A is still Maya after tab B signed in as Daniel", (await tabA.locator(".sidebar .me b").textContent()) === "Maya Chen");
+  check("tab B is Daniel", (await tabB.locator(".sidebar .me b").textContent()) === "Daniel Okafor");
+  await tabA.locator(".sidebar .me").click();
+  await tabA.getByRole("menuitem", { name: /Daniel Okafor/ }).waitFor();
+  check("account menu lists the other signed-in account", true);
+  await shot(tabA, "43-account-menu");
+  await tabA.keyboard.press("Escape");
+  // both open the document Maya shares with Daniel
+  const shared = (await tabA.evaluate(async () => (await (await fetch("/api/documents?scope=owned", { headers: { "x-docspace-user": sessionStorage.getItem("ds-tab-account") ?? "" } })).json()).documents)) as { id: string; title: string }[];
+  const roadmap = shared.find((d) => d.title === "Q4 Product Roadmap")!;
+  await tabA.goto(`${BASE}/doc/${roadmap.id}`);
+  await tabB.goto(`${BASE}/doc/${roadmap.id}`);
+  await tabA.locator(".tiptap h1").waitFor();
+  await tabB.locator(".tiptap h1").waitFor();
+  await tabA.locator(".presence .av[title='Daniel Okafor']").waitFor({ timeout: 10000 }).catch(() => {});
+  await tabB.locator(".presence .av[title='Maya Chen']").waitFor({ timeout: 10000 }).catch(() => {});
+  check("same doc, two tabs: Maya's tab shows Daniel as active", (await tabA.locator(".presence .av[title='Daniel Okafor']").count()) === 1);
+  check("same doc, two tabs: Daniel's tab shows Maya as active", (await tabB.locator(".presence .av[title='Maya Chen']").count()) === 1);
+  check("Daniel's tab shows the document as shared ('Owned by Maya Chen')", await tabB.getByText("Owned by Maya Chen").isVisible());
+  await shot(tabA, "44-two-tabs-maya");
+  await shot(tabB, "45-two-tabs-daniel");
+  // switching one tab does not change the other
+  await tabB.getByRole("button", { name: "Accounts" }).click();
+  await tabB.getByRole("menuitem", { name: /Maya Chen/ }).click();
+  await tabB.waitForLoadState("load");
+  await tabB.locator(".tiptap h1").waitFor();
+  check("switching tab B to Maya: tab B now owns the doc (no 'Owned by' pill)", (await tabB.getByText("Owned by Maya Chen").count()) === 0);
+  await tabA.reload();
+  await tabA.locator(".tiptap h1").waitFor();
+  check("tab A is unaffected by tab B's switch", (await tabA.evaluate(() => sessionStorage.getItem("ds-tab-account"))) !== null);
+  await one.close();
 
   // ---------- phone ----------
   const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, storageState: await ctx.storageState() });

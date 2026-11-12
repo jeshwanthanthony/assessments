@@ -166,6 +166,63 @@ async function main() {
     const after = (await maya.req(`/api/documents/${id}`)).body?.document?.content;
     check("versions: owner restores; the document has the old content again", rs.status === 200 && after?.content?.[0]?.content?.[0]?.text === "Maya's text");
     check("versions: restoring adds a version instead of deleting history", ((await maya.req(`/api/documents/${id}/versions`)).body?.versions ?? []).length >= vers.length);
+
+    // ---------- new accounts: sharing and permissions both ways ----------
+    const jesh = new Session();
+    const jEmail = `e2e-owner-${Date.now()}@docspace.test`;
+    await jesh.req("/api/auth/signup", { method: "POST", json: { name: "New Owner", email: jEmail, password: "Str0ng#Pass" } });
+    const jMe = (await jesh.req("/api/me")).body?.user;
+    const jDoc = (await jesh.req("/api/documents", { method: "POST", json: { title: "New owner doc" } })).body?.id;
+    const jShare = await jesh.req(`/api/documents/${jDoc}/share`, { method: "POST", json: { email: "maya@docspace.dev", role: "editor" } });
+    check("new account: owner can share with an existing user", jShare.status === 200, jShare.body);
+    const mSees = ((await maya.req("/api/documents?scope=shared")).body?.documents ?? []).find((d: { id: string }) => d.id === jDoc);
+    check("new account: the recipient sees it under Shared with me, owned by the new account", mSees?.owner?.email === jEmail && mSees?.role === "editor");
+    check("new account: the recipient (editor) can edit it", (await maya.req(`/api/documents/${jDoc}`, { method: "PATCH", json: { content: doc("edited by Maya") } })).status === 200);
+    check("new account: the recipient cannot re-share it", (await maya.req(`/api/documents/${jDoc}/share`, { method: "POST", json: { email: "daniel@docspace.dev" } })).status === 403);
+    check("new account: Daniel (not shared) cannot open it", (await daniel.req(`/api/documents/${jDoc}`)).status === 404);
+
+    // ---------- several accounts on one browser, a different one per tab ----------
+    const multi = new Session();
+    await multi.req("/api/auth/login", { method: "POST", json: { email: "daniel@docspace.dev", password: "demo1234" } });
+    const add = await multi.req("/api/auth/login", { method: "POST", json: { email: jEmail, password: "Str0ng#Pass" } });
+    check("switcher: adding a second account makes it the default for new tabs", add.status === 200 && (await multi.req("/api/me")).body?.user?.email === jEmail);
+    const accts = (await multi.req("/api/auth/accounts")).body;
+    const emails = (accts?.accounts ?? []).map((x: { email: string }) => x.email);
+    check("switcher: lists both signed-in accounts, default first", emails[0] === jEmail && emails.includes("daniel@docspace.dev") && emails.length === 2, emails);
+    check("switcher: never exposes tokens", !/"rt"|refresh|access_token/.test(JSON.stringify(accts)));
+    const wrong = await multi.req("/api/auth/login", { method: "POST", json: { email: "maya@docspace.dev", password: "nope" } });
+    check("switcher: a failed sign-in keeps the accounts as they were", wrong.status === 401 && (await multi.req("/api/auth/accounts")).body?.accounts?.length === 2);
+    const danielId = accts.accounts.find((x: { email: string }) => x.email === "daniel@docspace.dev").id;
+    const asDaniel = { headers: { "x-docspace-user": danielId } };
+    const asJesh = { headers: { "x-docspace-user": jMe.id } };
+    check("per-tab: a tab using Daniel acts as Daniel", (await multi.req("/api/me", asDaniel)).body?.user?.email === "daniel@docspace.dev");
+    check("per-tab: at the same time, a tab using the new account acts as it", (await multi.req("/api/me", asJesh)).body?.user?.email === jEmail);
+    check("per-tab: permissions follow the tab's account (Daniel cannot open the doc)", (await multi.req(`/api/documents/${jDoc}`, asDaniel)).status === 404);
+    check("per-tab: the owner's tab can", (await multi.req(`/api/documents/${jDoc}`, asJesh)).status === 200);
+    check("per-tab: Daniel's tab cannot share the owner's doc", (await multi.req(`/api/documents/${jDoc}/share`, { method: "POST", json: { email: "priya@docspace.dev" }, ...asDaniel })).status === 403);
+    const notHere = await multi.req("/api/me", { headers: { "x-docspace-user": "9f0462b3-14a6-4dbf-9be9-8543c224f7d9" } });
+    check("per-tab: a tab cannot act as an account not signed in on this browser", notHere.status === 409 && notHere.body?.error?.code === "session_changed");
+    await multi.req("/api/auth/logout", { method: "POST", json: { userId: danielId } });
+    check("switcher: signing Daniel out ends Daniel's tabs only", (await multi.req("/api/me", asDaniel)).status === 409 && (await multi.req("/api/me", asJesh)).status === 200);
+    await multi.req("/api/auth/login", { method: "POST", json: { email: "daniel@docspace.dev", password: "demo1234" } });
+    await multi.req("/api/auth/logout", { method: "POST", json: { userId: danielId } });
+    check("switcher: signing out the default account hands the default to the next one", (await multi.req("/api/me")).body?.user?.email === jEmail);
+    await multi.req("/api/auth/logout", { method: "POST", json: { all: true } });
+    check("switcher: sign out of all leaves nobody signed in", (await multi.req("/api/me")).status === 401 && ((await multi.req("/api/auth/accounts")).body?.accounts ?? []).length === 0);
+
+    // ---------- delete account removes everything ----------
+    await maya.req(`/api/documents/${jDoc}/comments`, { method: "POST", json: { body: "Maya's comment on the new owner's doc" } });
+    await jesh.req(`/api/documents/${id}/comments`, { method: "POST", json: { body: "x" } }); // no access: ignored
+    check("delete: wrong password is refused", (await jesh.req("/api/account/delete", { method: "POST", json: { password: "Wrong#Pass1" } })).status === 403);
+    check("delete: sample accounts cannot be deleted", (await maya.req("/api/account/delete", { method: "POST", json: { password: "demo1234" } })).status === 403);
+    const del = await jesh.req("/api/account/delete", { method: "POST", json: { password: "Str0ng#Pass" } });
+    check("delete: correct password deletes the account", del.status === 200, del.body);
+    check("delete: the session is gone", (await jesh.req("/api/me")).status === 401);
+    check("delete: cannot sign in again", (await new Session().req("/api/auth/login", { method: "POST", json: { email: jEmail, password: "Str0ng#Pass" } })).status === 401);
+    check("delete: their documents are gone for people they shared with", !((await maya.req("/api/documents?scope=shared")).body?.documents ?? []).some((d: { id: string }) => d.id === jDoc));
+    check("delete: their documents are gone, comments included", (await maya.req(`/api/documents/${jDoc}/comments`)).body?.comments?.length === 0 && (await maya.req(`/api/documents/${jDoc}`)).status === 404);
+    check("delete: the email can no longer receive shares", (await maya.req(`/api/documents/${id}/share`, { method: "POST", json: { email: jEmail } })).status === 404);
+    check("delete: the email can be registered again", (await new Session().req("/api/auth/signup", { method: "POST", json: { name: "Again", email: jEmail, password: "Str0ng#Pass" } })).status === 201);
   } finally {
     for (const id of created.filter((x) => !x.startsWith("fresh:"))) await maya.req(`/api/documents/${id}`, { method: "DELETE" });
     check("cleanup: test documents deleted", (await maya.req(`/api/documents/${created[0]}`)).status === 404);

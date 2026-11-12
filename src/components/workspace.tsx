@@ -1,6 +1,6 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { api } from "./ui";
+import { api, onAuthChange, setExpectedUser } from "./ui";
 import type { DocSummary, Profile } from "@/lib/core/types";
 
 type ListState = "loading" | "ready" | "error";
@@ -30,6 +30,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         api<{ documents: DocSummary[] }>("/api/documents?scope=shared"),
       ]);
       setMe(m.user);
+      setExpectedUser(m.user.id);
       setOwned(o.documents);
       setShared(s.documents);
       setState("ready");
@@ -39,6 +40,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => { reload(); }, [reload]);
+  useEffect(() => onAuthChange(() => { api("/api/me").catch(() => {}); }), []);
 
   const patchDoc = useCallback((id: string, patch: Partial<DocSummary>) => {
     const f = (l: DocSummary[]) => l.map((d) => (d.id === id ? { ...d, ...patch } : d));

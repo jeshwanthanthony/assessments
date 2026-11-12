@@ -97,16 +97,25 @@ export function Menu({
   const ref = useRef<HTMLDivElement>(null);
   const [style, setStyle] = useState<React.CSSProperties>({ visibility: "hidden" });
   useLayoutEffect(() => {
-    const a = anchor.current?.getBoundingClientRect();
     const m = ref.current;
-    if (!a || !m) return;
-    const w = m.offsetWidth, h = m.offsetHeight;
-    let left = align === "end" ? a.right - w : a.left;
-    left = Math.max(8, Math.min(window.innerWidth - w - 8, left));
-    let top = up ? a.top - h - 4 : a.bottom + 4;
-    if (!up && top + h > window.innerHeight - 8) top = Math.max(8, a.top - h - 4);
-    setStyle({ left, top });
+    if (!m) return;
+    // Re-place whenever the menu changes size (e.g. a list that loads after opening), always inside the viewport.
+    const place = () => {
+      const r = anchor.current?.getBoundingClientRect();
+      if (!r) return;
+      const w = m.offsetWidth, h = m.offsetHeight;
+      let left = align === "end" ? r.right - w : r.left;
+      left = Math.max(8, Math.min(window.innerWidth - w - 8, left));
+      let top = up ? r.top - h - 4 : r.bottom + 4;
+      if (!up && top + h > window.innerHeight - 8) top = r.top - h - 4;
+      top = Math.max(8, Math.min(window.innerHeight - h - 8, top));
+      setStyle({ left, top, maxHeight: window.innerHeight - 16, overflowY: "auto" });
+    };
+    place();
     m.querySelector<HTMLButtonElement>("button:not([disabled])")?.focus();
+    const ro = new ResizeObserver(place);
+    ro.observe(m);
+    return () => ro.disconnect();
   }, [anchor, align, up]);
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -212,13 +221,44 @@ export class ApiFailure extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
 }
 
+// ---------- session identity (one account per browser; tabs must agree) ----------
+
+// Each TAB uses one account (several can be signed in on the browser). The choice lives in sessionStorage,
+// which is per tab, and every API call names it in x-docspace-user; the server acts as that account.
+const TAB_KEY = "ds-tab-account";
+let expectedUser: string | null = null;
+try { expectedUser = typeof window !== "undefined" ? window.sessionStorage.getItem(TAB_KEY) : null; } catch { /* storage blocked */ }
+/** Pins this tab to an account (null: follow the browser default account). */
+export function setExpectedUser(id: string | null) {
+  expectedUser = id;
+  try { if (id) window.sessionStorage.setItem(TAB_KEY, id); else window.sessionStorage.removeItem(TAB_KEY); } catch { /* storage blocked */ }
+}
+export const tabAccount = () => expectedUser;
+
+const AUTH_CHANNEL = "docspace-auth";
+/** Tell the other open tabs that the account changed (sign-in, sign-up, switch, sign-out, delete). */
+export function announceAuthChange() {
+  try { new BroadcastChannel(AUTH_CHANNEL).postMessage("changed"); } catch { /* old browser: the server guard still protects */ }
+}
+/** Run when another tab signs an account in or out (each tab then re-checks that its own account is still signed in). */
+export function onAuthChange(fn: () => void): () => void {
+  try {
+    const ch = new BroadcastChannel(AUTH_CHANNEL);
+    ch.onmessage = () => fn();
+    return () => ch.close();
+  } catch { return () => {}; }
+}
+
 export async function api<T>(path: string, init?: RequestInit & { json?: unknown }): Promise<T> {
   const { json, ...rest } = init ?? {};
   let res: Response;
+  const h = new Headers(rest.headers);
+  if (json !== undefined) h.set("content-type", "application/json");
+  if (expectedUser && !path.startsWith("/api/auth")) h.set("x-docspace-user", expectedUser);
   try {
     res = await fetch(path, {
       ...rest,
-      headers: json !== undefined ? { "content-type": "application/json", ...rest.headers } : rest.headers,
+      headers: h,
       body: json !== undefined ? JSON.stringify(json) : rest.body,
     });
   } catch {
@@ -227,6 +267,11 @@ export async function api<T>(path: string, init?: RequestInit & { json?: unknown
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     if (res.status === 401 && typeof window !== "undefined" && !path.startsWith("/api/auth")) window.location.href = "/login";
+    if (data?.error?.code === "session_changed" && typeof window !== "undefined") {
+      // This tab's account was signed out elsewhere: fall back to the browser's default account.
+      setExpectedUser(null);
+      window.location.href = "/";
+    }
     throw new ApiFailure(res.status, data?.error?.code ?? "error", data?.error?.message ?? "Something went wrong.");
   }
   return data as T;

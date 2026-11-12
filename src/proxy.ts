@@ -22,7 +22,8 @@ export async function proxy(request: NextRequest) {
   const { data } = await sb.auth.getUser();
   const isLogin = request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/signup";
   if (!data.user && !isLogin) return NextResponse.redirect(new URL("/login", request.url));
-  if (data.user && isLogin) return NextResponse.redirect(new URL("/", request.url));
+  // ?add=1 lets a signed-in person add another account (the current one moves to the switcher).
+  if (data.user && isLogin && !request.nextUrl.searchParams.has("add")) return NextResponse.redirect(new URL("/", request.url));
   return response;
 }
 

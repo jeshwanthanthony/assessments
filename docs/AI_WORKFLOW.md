@@ -13,7 +13,7 @@ How DocSpace was built. It separates the decisions I made from the work and deci
 | 5 | Opened **Cursor** and gave the main coding agent (**Claude Code, Opus 5.5**) the original brief, `UI_SPEC.md`, the design ZIP and the engineering context. | Me |
 | 6 | Chose **Supabase** (auth, database, persistence, access control) and **Netlify** (deployment). | Me |
 | 7 | Had the agent use the **Supabase and Netlify MCP connectors**: project creation, migrations, security advisor, env vars, deploys. | Me (which tools); agent (the calls) |
-| 8 | Directed scope during the build: run tests for core tasks 1-5, deploy with a public link; then add sign-up with a strong password policy and all five stretch features; keep every original document; write this note. | Me |
+| 8 | Directed scope during the build: run tests for core tasks 1-5 and deploy with a public link; add sign-up with a strong password policy and all five stretch features; keep every original document; write this note. After testing it myself: reported a sharing failure on a new account (screenshot), and asked for a real account switcher (no "demo" wording), several accounts at once with a different account per tab, account deletion that removes everything, and a more visible export. | Me |
 
 ## 2. What the AI decided, and what I changed or rejected
 
@@ -35,6 +35,7 @@ Changed or rejected along the way:
 | Helper and trigger functions in `public` | Supabase's security advisor showed they were callable over REST. Revoked access and moved the helpers to a private schema. |
 | First Netlify deploy (upload, no plugin declared) | Every route returned 404. Declared `@netlify/plugin-nextjs` and redeployed. |
 | Sign-up via Supabase `auth.signUp` | Rejected. Email confirmation is on by default and could not be changed from the build tools, so reviewers couldn't sign up instantly. Replaced with a database function that enforces the same password policy, with a global rate limit. The cost (no email-ownership check) is recorded as SEC-006, with the fix. |
+| My bug report: "Only the owner can add people" on my own new account | The agent checked the data, reproduced sharing as a new account in the database and through the live API (both worked), then used the Supabase auth logs to find the cause: another tab had signed in as Maya, and the session cookie is shared by all tabs. Instead of a patch, it built the lasting fix: per-tab accounts verified by the server, which is also what I had asked for (one account per tab). |
 | Comment button right-aligned in the panel footer | On production only, Netlify's "Powered by Netlify" badge covered it. Moved the button and the toasts clear of the badge. |
 
 Times the test was wrong, not the app (each checked by screenshot or step-by-step logging before changing anything):
@@ -59,8 +60,8 @@ All are recorded in `docs/MISTAKES.md` with replay tests.
 |---|---|
 | Pure logic | `npm test`: 16/16 |
 | Database access control, as real users | `npm run test:rls`: 32/32 |
-| Full stack over HTTP (core tasks 1-5, sign-up, roles, comments, versions) | `npm run test:e2e`: 62/62 against production |
-| UX in a real browser at 1280 px and 390 px | `npm run test:ui`: 31/31 against production. Screenshots compared with the approved handoff. |
+| Full stack over HTTP (core tasks 1-5, sign-up, roles, comments, versions, multi-account per tab, delete account) | `npm run test:e2e`: 89/89 against production |
+| UX in a real browser at 1280 px and 390 px | `npm run test:ui`: all checks pass against production, including two accounts in two tabs of one browser on the same document. Screenshots compared with the approved handoff. |
 | Security | Supabase security advisor (2 findings fixed); `npm audit` (0); security headers checked on the live site; open items in `docs/SECURITY_LEDGER.md` |
 | Deployment | Each deploy counted as done only after both live suites passed against https://docspace-ajaia.netlify.app |
 

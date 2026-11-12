@@ -3,6 +3,7 @@ import { fail, readJson, supabaseServer } from "@/lib/server/supabase";
 import { signUp } from "@/lib/server/documents";
 import { isStrongPassword, normalizeName, signUpOutcome } from "@/lib/core/auth";
 import { isValidEmail } from "@/lib/core/doc";
+import { forget, stashDefault } from "@/lib/server/accounts";
 
 /** Creates an account (policy checked here AND in the database), then signs the new user in. */
 export async function POST(req: Request) {
@@ -24,7 +25,9 @@ export async function POST(req: Request) {
   } catch {
     return fail(500, "signup_failed", "Couldn't create your account. Try again.");
   }
-  const { error } = await sb.auth.signInWithPassword({ email, password });
-  if (error) return fail(500, "signin_failed", "Account created. Sign in to continue.");
+  await stashDefault(sb, email);
+  const { data: signed, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error || !signed.user) return fail(500, "signin_failed", "Account created. Sign in to continue.");
+  await forget(signed.user.id);
   return NextResponse.json({ ok: true }, { status: 201 });
 }

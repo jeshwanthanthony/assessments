@@ -7,22 +7,22 @@ Built for the Ajaia AI-Native Full Stack Developer assignment ([original brief](
 
 ## Try it in two minutes
 
-1. Open the live app. Either **Create an account** (password: 8+ characters with an uppercase letter, a lowercase letter, a number and a symbol) or click a demo account.
+1. Open the live app. Either **Create an account** (password: 8+ characters with an uppercase letter, a lowercase letter, a number and a symbol) or click a sample account.
 2. **New document**: type, then format with the toolbar (or Ctrl/⌘+B, I, U; Ctrl/⌘+Alt+1-3 for headings; Ctrl/⌘+Shift+7/8 for lists).
    The status goes *Unsaved changes* → *Saving…* → *Saved*. Reload: everything is still there.
 3. **Share** → type `daniel@docspace.dev` → choose **Editor**, **Commenter** or **Viewer**.
 4. Select text → the comment icon → write a comment. Reply to it, or resolve it, from the Comments panel.
 5. The **history** icon lists versions (one per person's editing session). Preview one, then **Restore**.
-6. Open the same document as a second user (another browser or a private window): their avatar appears in the top bar.
+6. **Two accounts side by side:** account menu (bottom left) → **Add another account** → sign in. Each tab keeps its own account, so open the same document in two tabs as two people and each sees the other in the top bar. Switching account in one tab never changes the others.
 7. **Import** a `.txt` or `.md` file (max 1 MB). **Export** (download icon) to Markdown or Print / save as PDF.
 
-| Demo account | Password | Notes |
+| Sample account | Password | Notes |
 |---|---|---|
 | maya@docspace.dev | demo1234 | Owns 3 docs, has 2 shared with her |
 | daniel@docspace.dev | demo1234 | Owns 2 docs, has 2 shared with him |
 | priya@docspace.dev | demo1234 | Share target; owns one doc shared with both |
 
-Demo accounts are shared by every reviewer, so their data may change while you look. A new account starts empty.
+Sample accounts are shared by every reviewer, so their data may change while you look, and they can't be deleted. A new account starts empty.
 
 ## What is built
 
@@ -33,7 +33,7 @@ Demo accounts are shared by every reviewer, so their data may change while you l
 | File upload | **.txt and .md only, up to 1 MB** → a new document. Text: each line is a paragraph. Markdown: headings, lists, bold, italic and `<u>` are kept. Checked in the browser and again on the server (type, size, UTF-8, no binary). |
 | Sharing | Owner shares by email as Editor, Commenter or Viewer; can change a role or remove access. Owned and shared documents are separate lists with distinct icons; the editor shows "Owned by …" and a role pill. |
 | Persistence | Supabase Postgres. Content is stored as editor JSON (lossless structure and formatting). Access is enforced by row-level security in the database, not only in the API. |
-| Accounts | Sign-up with name, email and a password policy (live checklist; the API and the database both enforce it), sign-in, sign-out, demo accounts |
+| Accounts | Sign-up with a password policy (live checklist; the API and the database both enforce it). Several accounts signed in at once, with a **different account per tab**, a one-click switcher, sign out of one or all, and **Delete account** (password re-check; removes the account, its documents, shares, comments and history). |
 | Validation and errors | Every state in the UI spec, plus sign-up errors, conflicts, and role refusals |
 
 **Stretch features**, all five from the brief:
@@ -79,8 +79,8 @@ To use **your own Supabase project**:
 |---|---|---|---|
 | `npm test` | 16 | Import/export round-trip, title/email/file validation, password policy, role rules, share and sign-up status → HTTP code and UI copy | nothing (offline) |
 | `npm run test:rls` | 32 | Against the real database as real users: outsiders and anon see nothing; viewers can't write or comment; commenters can't edit; editors can't delete, share or take ownership; no comment as someone else; versions only via trigger; weak passwords refused by the database | `.env.local` |
-| `npm run test:e2e` | 62 | All five core tasks over HTTP as two users, plus sign-up, the commenter role, comments, and version preview/restore | a running app (`BASE=…`, default `http://localhost:3000`) |
-| `npm run test:ui` | 31 | Headless Chromium at desktop and phone sizes: sign-up, login, lists, search, create, format, autosave, reload persistence, share, comment/reply/resolve, history, import, a second user, presence, no sideways scroll on phone | a running app; `npx playwright install chromium` once |
+| `npm run test:e2e` | 89 | All five core tasks over HTTP as two users, plus sign-up, new-account sharing both ways, the commenter role, comments, version preview/restore, several accounts with a different one per tab, and account deletion | a running app (`BASE=…`, default `http://localhost:3000`) |
+| `npm run test:ui` | 42 | Headless Chromium at desktop and phone sizes: sign-up, login, lists, search, create, format, autosave, reload persistence, share, comment/reply/resolve, history, import, two accounts in two tabs of one browser on the same document (each sees the other), switching one tab only, export menu and Markdown download, no sideways scroll on phone | a running app; `npx playwright install chromium` once |
 
 All four suites pass against production at https://docspace-ajaia.netlify.app (2026-11-12). The two live suites create and delete their own documents.
 
