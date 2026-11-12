@@ -35,7 +35,9 @@ Replay: run `npm run test:ui`, stop it midway, check Maya's list.
 Undo: delete the leftover test documents from the sample account.
 Never again: a test that writes to shared data cleans up in `finally`, not at the end.
 
-### MINE-2026-11-12-shell-ate-template-strings (happened three times)
+### MINE-2026-11-12-shell-ate-template-strings (happened four times; the fourth minutes after this entry was written)
+Fourth time: `docs/TESTING.md` was generated through `node -e` with backticks for Markdown code spans. The shell ran them as commands (`npm test` ran once; the rest failed as unknown commands) and the broken file was committed and pushed in 5a1a380. Found by reading the file back after the push; rewritten with the editor tool in the next commit. Lesson added: Markdown code spans are backticks too, so docs are written with the editor tool as well, and every generated file is read back before committing.
+
 Steps: write a file containing JavaScript template strings through a bash heredoc or `node -e "..."`.
 Broke: the shell treated the backticks as command substitution; files were written with empty arguments (`multi.req(, asDaniel)`) or the command failed with "unexpected EOF". Caught by `tsc` each time, never shipped.
 Why: shell quoting rules apply before the text reaches the file.
