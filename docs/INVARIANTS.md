@@ -13,3 +13,6 @@ Each invariant names where it is enforced and which test proves it. A rule witho
 9. **No server secret exists in the app; the browser holds only the publishable key.** Enforced: `.env.example`, no service key anywhere. Proven: source review (SECURITY_LEDGER).
 10. **No invented capability:** the UI offers only what the role allows (no Share for non-owners, read-only editor for viewers). Enforced: `DocumentList`, `Editor`. Proven: UI and e2e role checks.
 11. **Migrations are additive and recorded** in `supabase/migrations/` with the live history in their header.
+12. **Only owners and editors change content; commenters comment; viewers only read.** Enforced: RLS on documents and document_comments, column grants. Proven: rls-check, e2e "roles/comments".
+13. **History is never lost by a restore.** Enforced: restore is an update, and the trigger snapshots it. Proven: e2e "versions: restoring adds a version".
+14. **A weak password never creates an account, even when the API is bypassed.** Enforced: public.sign_up. Proven: rls-check "database rejects a weak password".

@@ -16,12 +16,14 @@ Where this file and Git disagree, Git wins: fix this file.
 | Fact | Value |
 |---|---|
 | Host | Netlify site `docspace-ajaia`, https://docspace-ajaia.netlify.app |
-| Database | Supabase project `docspace` (us-east-1), 3 migrations applied |
-| Verified | e2e 40/40 and UI 21/21 against production; rls-check 22/22 |
+| Database | Supabase project `docspace` (us-east-1), 4 migrations applied |
+| Verified | unit 16/16, rls-check 32/32 (live DB), e2e 62/62 and UI 31/31 against production (2026-11-12) |
 
 ## 3. What changed recently
 
-- First release: all five core tasks, Viewer/Editor roles, presence, conflict-safe saving, Markdown/PDF export.
+- Sign-up with password policy; comments (threads, resolve); version history (preview, restore); Commenter role.
+- Original brief, full UI handoff and playbook preserved unmodified in docs/reference/.
+- First release: all five core tasks, roles, presence, conflict-safe saving, Markdown/PDF export.
 
 ## 4. In flight
 
@@ -29,7 +31,7 @@ Nothing is in flight.
 
 ## 5. Open problems
 
-- SEC-004 public sign-up enabled in Supabase Auth (docs/SECURITY_LEDGER.md).
+- SEC-006 sign-up does not verify email ownership (accepted for the demo); SEC-004 native Supabase sign-up still enabled.
 - Unit test for the editor save queue (INVARIANTS 6).
 - Content-Security-Policy (SECURITY_LEDGER "Needs validation").
 
@@ -48,4 +50,4 @@ Nothing is in flight.
 
 1. Push to a Git remote and connect Netlify to it for deploy previews.
 2. Close SEC-004 (disable sign-ups or build a sign-up screen).
-3. Next stretch candidate: version history (`document_versions` written on save).
+3. Next candidate: suggestion mode, or email verification + password reset.

@@ -1,43 +1,67 @@
 # AI-native workflow note
 
-## Tools used
+How DocSpace was built. It separates the decisions I made from the work and decisions of the AI tools, and lists only steps and test results that actually happened.
 
-- **Claude Code** (Claude Opus) as the main pair: scaffolding, the schema, routes, components and tests, driven from a written engineering playbook (the `AGENTS.md`, `docs/CODE_QUALITY.md`, `docs/ENGINEERING_JUDGMENT.md` family carried over from earlier work).
-- **Claude-generated UI handoff** (`docs/design/`): spec, tokens, interactive preview and 39 screenshots, produced and reviewed before any app code.
-- **MCP connectors from the same session:**
-  - Supabase: create the project, apply migrations, run the security advisor.
-  - Netlify: create the site, set env vars, deploy.
-- **Playwright** (headless Chromium) so the agent could *see* the UI it built at phone and desktop sizes, not just compile it.
+## 1. My workflow
 
-## Where AI materially sped things up
+| # | Step | Who decided |
+|---|---|---|
+| 1 | Used **ChatGPT (Sol 6.1)** to analyze the brief, list the requirements, prioritize functionality and choose the stack. | Me, with ChatGPT as analyst |
+| 2 | Gathered the Markdown docs and engineering playbook from my earlier product (HireMaitre). I had an AI agent strip everything product-specific and keep only the rules and processes (`docs/reference/playbook/`). | Me |
+| 3 | Used a **separate UI design agent (Claude Opus 5.5)** to create the interactive preview, design system, `UI_SPEC.md` and 39 screenshots (`docs/reference/DocSpace_UI_Handoff/`). | Me (direction); design agent (output) |
+| 4 | **Reviewed the UI handoff** before any application code. | Me |
+| 5 | Opened **Cursor** and gave the main coding agent (**Claude Code, Opus 5.5**) the original brief, `UI_SPEC.md`, the design ZIP and the engineering context. | Me |
+| 6 | Chose **Supabase** (auth, database, persistence, access control) and **Netlify** (deployment). | Me |
+| 7 | Had the agent use the **Supabase and Netlify MCP connectors**: project creation, migrations, security advisor, env vars, deploys. | Me (which tools); agent (the calls) |
+| 8 | Directed scope during the build: run tests for core tasks 1-5, deploy with a public link; then add sign-up with a strong password policy and all five stretch features; keep every original document; write this note. | Me |
 
-- **Design to code:** porting the preview's CSS and markup into React components, with every state in the spec, took minutes instead of hours.
-- **Schema and RLS first draft,** including the SECURITY DEFINER helpers that avoid policy recursion.
-- **Test scaffolding:** the 40-check API script and the 21-check browser journey were written fast, which made "test everything after every change" cheap.
-- **Infrastructure from the editor:** project creation, migrations, env vars and deploys happened without leaving the session.
+## 2. What the AI decided, and what I changed or rejected
 
-## What I changed or rejected
+Decisions the coding agent proposed and implemented (I reviewed the results; the reasons are in `docs/ARCHITECTURE.md`):
 
-- **Rejected:** "just rebuild it in Tailwind + shadcn because the spec says so." Porting the approved stylesheet was faster and more faithful. The deviation is written down in ARCHITECTURE.md.
-- **Rejected:** storing HTML. Kept editor JSON, which is lossless, validatable and needs no sanitising.
-- **Rejected:** checking permissions only in the API with a service key. Moved access into RLS and column grants so a route bug cannot leak data.
-- **Changed after a failure:** the first RLS read policy used only a helper function. `INSERT … RETURNING` failed, because the function's snapshot cannot see the new row. Added an `owner_id = auth.uid()` shortcut (`docs/MISTAKES.md`).
-- **Changed after the advisor:** the trigger function and the RLS helpers were callable over REST. I revoked the trigger function and moved the helpers to a private schema.
-- **Changed after the first deploy:** the site served 404s because an API-upload deploy does not auto-apply Netlify's Next.js runtime. I declared the plugin in `netlify.toml`.
-- **Fixed the tests, not the app, when the test was wrong:**
-  - `jsonb` reorders object keys, so the round-trip check now compares canonically.
-  - The browser test typed faster than Tiptap restores focus after a menu, so it now waits for focus like a person would.
-  - Each case was confirmed by looking at the screenshot before changing anything.
-- **Pinned dependencies:** the agent's first set of pinned versions had a critical Next.js advisory. I upgraded to patched versions until `npm audit` reported 0.
+- **Next.js 16 App Router + Tiptap 3**, with content stored as editor JSON rather than HTML. JSON is lossless, can be checked by shape, and needs no HTML sanitising.
+- **Access enforced in Postgres** (RLS, column grants, owner-checked functions). The API acts as the signed-in user and never holds a service key.
+- **Optimistic concurrency** on save (409 with *Load theirs* / *Keep mine*). Nothing is overwritten silently.
+- **Version history** as one snapshot per person's 10-minute session, written by a database trigger.
+- **The Commenter role** as the "beyond basic" permission tier.
 
-## How I verified correctness, UX quality and reliability
+Changed or rejected along the way:
 
-| Layer | Evidence |
+| AI output | What happened |
 |---|---|
-| Pure logic | `npm test`: 12 unit tests (import, export round-trip, validation, share copy) |
-| Database security | `npm run test:rls`: 22 live checks as real users (outsider, editor, viewer, anon) |
-| Full stack | `npm run test:e2e`: 40 HTTP checks of all five tasks, run locally AND against production |
-| UX | `npm run test:ui`: 21 browser checks at 1280 px and 390 px (formatting, autosave, reload persistence, share and import dialogs, a second user, presence, no sideways scroll), plus screenshot review against the approved screenshots |
-| Security posture | Supabase security advisor, `npm audit`, security headers checked on the live site; findings recorded in `docs/SECURITY_LEDGER.md` |
+| First pinned dependency set (Next 15.1.3) | `npm audit` showed a critical Next.js advisory. Upgraded to patched versions (Next 16.4.6, Tiptap 3.33.1); audit then reported 0 vulnerabilities. |
+| Rebuilding the UI in Tailwind + shadcn, as the spec names | Not done. The agent ported the approved preview's CSS and tokens directly: more faithful and faster. The deviation is documented. |
+| First RLS read policy (helper function only) | Broke `INSERT … RETURNING`, because the helper's snapshot can't see the new row. Added an `owner_id` shortcut. |
+| Helper and trigger functions in `public` | Supabase's security advisor showed they were callable over REST. Revoked access and moved the helpers to a private schema. |
+| First Netlify deploy (upload, no plugin declared) | Every route returned 404. Declared `@netlify/plugin-nextjs` and redeployed. |
+| Sign-up via Supabase `auth.signUp` | Rejected. Email confirmation is on by default and could not be changed from the build tools, so reviewers couldn't sign up instantly. Replaced with a database function that enforces the same password policy, with a global rate limit. The cost (no email-ownership check) is recorded as SEC-006, with the fix. |
+| Comment button right-aligned in the panel footer | On production only, Netlify's "Powered by Netlify" badge covered it. Moved the button and the toasts clear of the badge. |
 
-The rule throughout: an AI-written change counts only when a test or a screenshot I looked at says it works.
+Times the test was wrong, not the app (each checked by screenshot or step-by-step logging before changing anything):
+- `jsonb` reorders object keys, so the test now compares JSON structurally.
+- The test typed faster than the editor regains focus after a menu.
+- The test matched Next's hidden route announcer instead of the form alert.
+- A double-click landed on a space between words, so nothing was selected.
+- A stale local server was still serving the previous build.
+
+All are recorded in `docs/MISTAKES.md` with replay tests.
+
+## 3. Where AI materially sped things up
+
+- **Design to code:** every screen and state in the spec, ported from the preview, in a fraction of the hand-coding time.
+- **Schema, RLS and SQL functions,** including the policy-recursion workaround.
+- **Tests:** four suites, which made re-running everything after each change cheap.
+- **Infrastructure:** creating the database, running migrations, setting env vars and deploying all happened from the same session through MCP.
+
+## 4. How correctness, UX and reliability were verified
+
+| Layer | Evidence (final run, 2026-11-12) |
+|---|---|
+| Pure logic | `npm test`: 16/16 |
+| Database access control, as real users | `npm run test:rls`: 32/32 |
+| Full stack over HTTP (core tasks 1-5, sign-up, roles, comments, versions) | `npm run test:e2e`: 62/62 against production |
+| UX in a real browser at 1280 px and 390 px | `npm run test:ui`: 31/31 against production. Screenshots compared with the approved handoff. |
+| Security | Supabase security advisor (2 findings fixed); `npm audit` (0); security headers checked on the live site; open items in `docs/SECURITY_LEDGER.md` |
+| Deployment | Each deploy counted as done only after both live suites passed against https://docspace-ajaia.netlify.app |
+
+The rule throughout: AI output counted as done only when a test, or a screenshot I reviewed, showed it working.

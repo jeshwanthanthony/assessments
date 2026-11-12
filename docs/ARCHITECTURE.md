@@ -21,7 +21,9 @@ Browser (Next.js client components)
 |---|---|
 | `profiles` | id (= auth user), email, name, avatar colour; created by trigger |
 | `documents` | owner_id, title, `content jsonb` (Tiptap JSON), updated_at (trigger) |
-| `document_shares` | (document_id, user_id) → role `editor` or `viewer` |
+| `document_shares` | (document_id, user_id) → role `editor`, `commenter` or `viewer` |
+| `document_comments` | threads (parent_id), optional quoted text, resolved flag |
+| `document_versions` | snapshots written by a trigger: one per person per 10-minute session, 50 kept |
 
 Content is stored as **editor JSON, not HTML**. It is lossless for the formatting we support, can be validated by shape, never needs HTML sanitising on render (ProseMirror only renders nodes its schema knows), and converts cleanly to Markdown for import and export.
 
@@ -30,7 +32,10 @@ Content is stored as **editor JSON, not HTML**. It is lossless for the formattin
 Access lives in **the database**. The API routes do not hold a service key. They act as the signed-in user, so even a bug in a route cannot read or write a row the user has no right to.
 
 - **Read:** you own the document, or you have a share row.
-- **Update:** owner or editor. A column grant allows only `title` and `content`, so `owner_id` can never change.
+- **Update:** owner or editor (commenters and viewers cannot). A column grant allows only `title` and `content`, so `owner_id` can never change.
+- **Comments:** everyone with access reads them. Owner, editors and commenters write them, always as themselves. Only `resolved` is updatable. The author or the owner can delete one.
+- **Versions:** readable by anyone with access; written only by the trigger; restored only by the owner or an editor.
+- **Accounts:** `public.sign_up` checks the password policy (8-72 characters with upper, lower, number and symbol; the same rules as the UI checklist and the API) and caps new accounts at 30 per hour.
 - **Delete:** owner only.
 - **Shares:** there are no write policies. Writes go only through `share_document` and `update_share`, which check ownership and return a status (`no_user`, `already_shared`, `is_owner`…) that the API maps to an HTTP code and the exact UI copy.
 
@@ -49,16 +54,17 @@ Access lives in **the database**. The API routes do not hold a service key. They
 2. **Access control that is correct by construction.** RLS plus column grants, tested against the live database, rather than checks scattered across routes.
 3. **Fidelity to the approved design.** All states in the 39 screenshots: loading, empty, error, validation and phone layouts.
 4. **Verification.** Unit, database, API and browser tests, run locally and against production.
-5. **Stretch, only after 1-4 were green:** Viewer role (cheap given the RLS design), presence (cheap with Supabase Realtime), conflict handling, and export.
+5. **Stretch, only after 1-4 were green:** roles (cheap given the RLS design), presence (cheap with Supabase Realtime), conflict handling and export. Then, on request, sign-up, comments, version history and the Commenter role.
 
 ## Tradeoffs and cuts
 
 | Cut | Why | What it would take |
 |---|---|---|
 | Simultaneous co-editing (CRDT) | The spec put it out of scope, and real-time merge is a project of its own. Presence, idle refresh and 409 conflict handling cover the "two people, one doc" risk honestly. | Yjs + y-prosemirror over a Realtime or websocket provider, persisting Yjs updates |
-| Sign-up, password reset | Seeded accounts let reviewers test sharing in seconds | Supabase sign-up + email confirmation screens (SEC-004 in `docs/SECURITY_LEDGER.md`) |
+| Email verification, password reset | Reviewers must sign up instantly; the hosted project's confirm-email setting could not be changed from the build tools | Turn on Supabase email confirmation and switch the route to `auth.signUp` (SEC-006) |
+| Suggestion mode | Comments cover the review need with far less editor complexity | Tiptap tracked-changes marks with accept/reject |
 | .docx import | .txt and .md cover the product need; .docx needs a parser (mammoth) and sanitising | mammoth → HTML → Tiptap JSON on the server |
-| Version history, comments | Spec out of scope | A `document_versions` table written on save; comments as anchored marks |
+| Comment anchors as marks | Commenters cannot edit, so anchors cannot live inside the document | Positions mapped through ProseMirror steps, stored beside the comment |
 | Tailwind + shadcn | See "UI" above | Mechanical port; tokens already exist in `docs/design/tailwind.theme.ts` |
 
 ## Known limits
