@@ -7,19 +7,19 @@ the code of DocSpace movable. Read it with
 
 ## 1. What we run on
 
-Fill this table when the stack is chosen, and keep it current.
+Keep this table current.
 
 | Piece | Today | How tied to the provider |
 |---|---|---|
-| Database (documents, users, permissions) | | |
-| Schema history (migrations folder) | | |
-| Extensions | | |
-| Scheduled jobs | | |
-| Auth | | |
-| Data API | | |
-| Files (uploads, exports) | | |
-| Realtime / sync server | | |
-| App servers | | |
+| Database (documents, users, permissions) | Supabase Postgres: profiles, documents, document_shares, document_comments, document_versions | Low: plain Postgres tables, RLS policies and plpgsql functions |
+| Schema history (migrations folder) | supabase/migrations/, applied by hand and recorded | Low: plain SQL |
+| Extensions | pgcrypto (password hashing in sign_up and delete_my_account) | Low: standard Postgres extension |
+| Scheduled jobs | None | None |
+| Auth | Supabase Auth (email and password, ES256 tokens); sign_up writes auth.users directly | High: auth.users, auth.uid() in policies, SEC-007 |
+| Data API | Next.js API routes calling Supabase (PostgREST) as the user | Medium: queries go through supabase-js, behind named functions in src/lib/server/documents.ts |
+| Files (uploads, exports) | None stored: imports become documents; exports are built in the browser | None |
+| Realtime / sync server | Supabase Realtime broadcast and presence (cursors, saves, share notices) | Medium: replaceable by any websocket broadcast service |
+| App servers | Next.js on Netlify (@netlify/plugin-nextjs) | Low: standard Next.js, runs on any Node host |
 
 ## 2. The two ways to grow
 

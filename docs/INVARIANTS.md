@@ -7,7 +7,7 @@ Each invariant names where it is enforced and which test proves it. A rule witho
 3. **Viewers never write; editors never delete, share or change the owner.** Enforced: RLS `documents_update` / `documents_delete`, column grant `update(title, content)`, `share_document` ownership check. Proven: rls-check, e2e "3 …".
 4. **Shares change only through the owner-checked functions.** Enforced: no write policies + revoked grants on `document_shares`. Proven: rls-check "shares cannot be inserted directly".
 5. **A saved edit is never silently overwritten.** Enforced: `baseUpdatedAt` optimistic concurrency in `PATCH /api/documents/:id` (409 + latest). Proven: e2e "4 stale save is a 409 conflict", rls-check "write against a stale version".
-6. **An unsaved edit is never dropped on a failed save.** Enforced: `Editor.flush` re-queues the patch and shows Retry; `beforeunload` warns. Proven: UI save-error state (manual: `?` offline), unit of the queue logic is TODO.
+6. **An unsaved edit is never dropped on a failed save.** Enforced: `Editor.flush` re-queues the patch and shows Retry; `beforeunload` warns. Proven: not yet by an automated test (open item in docs/HANDOFF.md section 5).
 7. **Formatting survives save and reopen exactly.** Enforced: content stored as Tiptap JSON (`jsonb`), validated by `isDocJSON`. Proven: e2e "4 reopen keeps formatting", UI "after reload: …".
 8. **Uploads are .txt/.md, at most 1 MB, UTF-8 text, checked on client and server by the same function.** Enforced: `checkImportFile` + import route. Proven: unit tests, e2e "2 …".
 9. **No server secret exists in the app; the browser holds only the publishable key.** Enforced: `.env.example`, no service key anywhere. Proven: source review (SECURITY_LEDGER).

@@ -4,6 +4,8 @@ A lightweight collaborative document editor, built for the Ajaia AI-Native Full 
 
 **Live app:** https://docspace-ajaia.netlify.app (nothing to install)
 
+**Walkthrough video:** https://www.loom.com/share/2d50647b57ce470c81677bf84ddd62e2
+
 ## Test accounts
 
 | Email | Password |

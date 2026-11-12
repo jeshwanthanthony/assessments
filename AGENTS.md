@@ -120,15 +120,18 @@ feature landing), even if the session continues:
 
 ## Token ROI - what to read for which task
 
-Fill this table as the codebase grows: one row per area, naming the doc to
-read first, the code to open, and what to skip.
+One row per area: the doc to read first, the code to open, and what to skip.
 
 | Task smells like... | Read (in order) | Skip |
 |---|---|---|
 | Visual/design change | `DESIGN.md` first, always | - |
 | Security review / hardening | `docs/SECURITY_LEDGER.md` first | - |
 | Touching sync, permissions, storage, migrations | `docs/INVARIANTS.md`, then the area doc | - |
-| An AI bug report or a change to a prompt or model route | `docs/TESTING.md` | - |
+| Editor, toolbar, autosave, cursors | `docs/ARCHITECTURE.md`, then `src/components/Editor.tsx`, `remoteCursors.ts` | API routes |
+| Sharing, roles, permissions | `docs/INVARIANTS.md`, `supabase/migrations/`, then `src/app/api/documents/[id]/share` | UI files |
+| Accounts, sign-in, switching, delete | `src/lib/server/accounts.ts`, `src/lib/server/supabase.ts` (requireUser) | editor |
+| Import / export | `src/lib/core/doc.ts` (unit tested), `src/components/ImportDialog.tsx` | database |
+| Comments, version history | `src/components/DocPanel.tsx`, the comments/versions API routes | sharing |
 | Continue what the last agent left; ship, deploy, roll back | `docs/HANDOFF.md`, `docs/DEPLOYMENT.md` | - |
 
 Budget rule of thumb: rehydration for a normal task should cost about 3 to 6

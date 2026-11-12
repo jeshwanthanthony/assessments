@@ -35,14 +35,17 @@ doc is created; remove it the day the doc is deleted.
 
 ## Local AGENTS.md files (rules for a code area, next to the code)
 
-List each one here with a one-line summary once it exists (client, sync
-server, migrations).
+None yet: the codebase is small enough that AGENTS.md and the docs here cover it.
 
 ## Verification suites
 
 | Command | What it proves |
 |---|---|
-| `<command>` | <placeholder> |
+| `npm test` | Unit: import/export, validation, password policy, roles (offline) |
+| `npm run test:rls` | Database permissions as real users (live) |
+| `npm run test:e2e` | All features over HTTP (needs a running app; BASE=...) |
+| `npm run test:ui` | Browser, desktop and phone (needs a running app; BASE=...) |
+| `npm run perf:share` | Share and API latency (BASE=...) |
 
 ## Reading paths by task (the mandatory reads, plus one path; not the repo)
 
